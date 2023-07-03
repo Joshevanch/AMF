@@ -10,15 +10,50 @@
 package communication
 
 import (
+	"context"
+	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
-
 	"github.com/free5gc/amf/internal/logger"
+	"github.com/free5gc/openapi"
+	"github.com/free5gc/openapi/models"
+	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // NonUeN2MessageTransfer - Namf_Communication Non UE N2 Message Transfer service Operation
 func HTTPNonUeN2MessageTransfer(c *gin.Context) {
 	logger.CommLog.Warnf("Handle Non Ue N2 Message Transfer is not implemented.")
+	body, _ := ioutil.ReadAll(c.Request.Body)
+	var message models.NonUeN2MessageTransferRequest
+	message.JsonData = new(models.N2InformationTransferReqData)
+	contentType := c.GetHeader("Content-Type")
+	openapi.Deserialize(&message, body, contentType)
+	insertToDatabase(message)
+	println(string(body))
 	c.JSON(http.StatusOK, gin.H{})
+}
+
+func insertToDatabase(message models.NonUeN2MessageTransferRequest) {
+	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
+	client, err := mongo.Connect(context.TODO(), clientOptions)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = client.Ping(context.TODO(), nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Connected to MongoDB!")
+	collection := client.Database("local").Collection("AMFNonUeN2MessageTransfer")
+	insertResult, err := collection.InsertOne(context.TODO(), message)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Inserted document ID: %v\n", insertResult.InsertedID)
+
 }

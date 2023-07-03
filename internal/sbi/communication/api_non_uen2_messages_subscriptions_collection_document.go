@@ -10,15 +10,46 @@
 package communication
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
-
+	"log"
+	"fmt"
+	"io/ioutil"
 	"github.com/gin-gonic/gin"
-
+	"github.com/free5gc/openapi/models"
 	"github.com/free5gc/amf/internal/logger"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // NonUeN2InfoSubscribe - Namf_Communication Non UE N2 Info Subscribe service Operation
 func HTTPNonUeN2InfoSubscribe(c *gin.Context) {
 	logger.CommLog.Warnf("Handle Non Ue N2 Info Subscribe is not implemented.")
+	body, _ := ioutil.ReadAll(c.Request.Body)
+	message := models.NonUeN2InfoSubscriptionCreateData{}
+	json.Unmarshal(body, &message)
+	insertToSubscriptionDatabase(message)
 	c.JSON(http.StatusOK, gin.H{})
+}
+
+func insertToSubscriptionDatabase(message models.NonUeN2InfoSubscriptionCreateData) {
+	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
+	client, err := mongo.Connect(context.TODO(), clientOptions)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = client.Ping(context.TODO(), nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Connected to MongoDB!")
+	collection := client.Database("local").Collection("AMFNonUeN2MessageSubscriptions")
+	insertResult, err := collection.InsertOne(context.TODO(), message)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Inserted document ID: %v\n", insertResult.InsertedID)
+
 }
