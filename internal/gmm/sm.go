@@ -2,15 +2,12 @@ package gmm
 
 import (
 	"github.com/free5gc/amf/internal/context"
-	gmm_common "github.com/free5gc/amf/internal/gmm/common"
 	gmm_message "github.com/free5gc/amf/internal/gmm/message"
 	"github.com/free5gc/amf/internal/logger"
-	ngap_message "github.com/free5gc/amf/internal/ngap/message"
 	"github.com/free5gc/amf/internal/sbi/consumer"
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasConvert"
 	"github.com/free5gc/nas/nasMessage"
-	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/openapi/models"
 	"github.com/free5gc/util/fsm"
 )
@@ -37,7 +34,7 @@ func DeRegistered(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 					ArgAmfUe:         amfUe,
 					ArgAccessType:    accessType,
 					ArgProcedureCode: procedureCode,
-				}, logger.GmmLog); err != nil {
+				}); err != nil {
 					logger.GmmLog.Errorln(err)
 				}
 			}
@@ -83,7 +80,7 @@ func Registered(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 					ArgAmfUe:         amfUe,
 					ArgAccessType:    accessType,
 					ArgProcedureCode: procedureCode,
-				}, logger.GmmLog); err != nil {
+				}); err != nil {
 					logger.GmmLog.Errorln(err)
 				}
 			}
@@ -108,7 +105,7 @@ func Registered(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 				ArgAmfUe:      amfUe,
 				ArgAccessType: accessType,
 				ArgNASMessage: gmmMessage,
-			}, logger.GmmLog); err != nil {
+			}); err != nil {
 				logger.GmmLog.Errorln(err)
 			}
 		case nas.MsgTypeStatus5GMM:
@@ -147,7 +144,7 @@ func Authentication(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 			if err := GmmFSM.SendEvent(state, AuthErrorEvent, fsm.ArgsType{
 				ArgAmfUe:      amfUe,
 				ArgAccessType: accessType,
-			}, logger.GmmLog); err != nil {
+			}); err != nil {
 				logger.GmmLog.Errorln(err)
 			}
 		}
@@ -155,7 +152,7 @@ func Authentication(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 			if err := GmmFSM.SendEvent(state, AuthSuccessEvent, fsm.ArgsType{
 				ArgAmfUe:      amfUe,
 				ArgAccessType: accessType,
-			}, logger.GmmLog); err != nil {
+			}); err != nil {
 				logger.GmmLog.Errorln(err)
 			}
 		}
@@ -174,14 +171,7 @@ func Authentication(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 				mobileIdentityContents := gmmMessage.IdentityResponse.MobileIdentity.GetMobileIdentityContents()
 				amfUe.IdentityTypeUsedForRegistration = nasConvert.GetTypeOfIdentity(mobileIdentityContents[0])
 
-				err := GmmFSM.SendEvent(
-					state,
-					AuthRestartEvent,
-					fsm.ArgsType{
-						ArgAmfUe:      amfUe,
-						ArgAccessType: accessType,
-					}, logger.GmmLog,
-				)
+				err := GmmFSM.SendEvent(state, AuthRestartEvent, fsm.ArgsType{ArgAmfUe: amfUe, ArgAccessType: accessType})
 				if err != nil {
 					logger.GmmLog.Errorln(err)
 				}
@@ -214,17 +204,6 @@ func Authentication(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 	case AuthFailEvent:
 		logger.GmmLog.Debugln(event)
 		logger.GmmLog.Warnln("Reject authentication")
-		amfUe := args[ArgAmfUe].(*context.AmfUe)
-		accessType := args[ArgAccessType].(models.AccessType)
-		if amfUe.RanUe[accessType] != nil {
-			ngap_message.SendUEContextReleaseCommand(amfUe.RanUe[accessType], context.UeContextN2NormalRelease,
-				ngapType.CausePresentNas, ngapType.CauseNasPresentAuthenticationFailure)
-			err := amfUe.RanUe[accessType].Remove()
-			if err != nil {
-				logger.GmmLog.Errorln(err)
-			}
-		}
-		gmm_common.RemoveAmfUe(amfUe, true)
 	case fsm.ExitEvent:
 		// clear authentication related data at exit
 		amfUe := args[ArgAmfUe].(*context.AmfUe)
@@ -243,7 +222,7 @@ func SecurityMode(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 		amfUe := args[ArgAmfUe].(*context.AmfUe)
 		accessType := args[ArgAccessType].(models.AccessType)
 		// set log information
-		amfUe.UpdateLogFields(accessType)
+		amfUe.UpdateLogFields()
 
 		amfUe.GmmLog.Debugln("EntryEvent at GMM State[SecurityMode]")
 		if amfUe.SecurityContextIsValid() {
@@ -252,27 +231,15 @@ func SecurityMode(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 				ArgAmfUe:      amfUe,
 				ArgAccessType: accessType,
 				ArgNASMessage: amfUe.RegistrationRequest,
-			}, logger.GmmLog); err != nil {
+			}); err != nil {
 				logger.GmmLog.Errorln(err)
 			}
 		} else {
 			eapSuccess := args[ArgEAPSuccess].(bool)
 			eapMessage := args[ArgEAPMessage].(string)
 			// Select enc/int algorithm based on ue security capability & amf's policy,
-			amfSelf := context.GetSelf()
-			if err := amfUe.SelectSecurityAlg(amfSelf.SecurityAlgorithm.IntegrityOrder,
-				amfSelf.SecurityAlgorithm.CipheringOrder); err != nil {
-				amfUe.GmmLog.Errorf("Select security algorithm failed: %s", err)
-				gmm_message.SendRegistrationReject(amfUe.RanUe[accessType], nasMessage.Cause5GMMUESecurityCapabilitiesMismatch, "")
-				err = GmmFSM.SendEvent(state, SecurityModeFailEvent, fsm.ArgsType{
-					ArgAmfUe:      amfUe,
-					ArgAccessType: accessType,
-				}, logger.GmmLog)
-				if err != nil {
-					logger.GmmLog.Errorln(err)
-				}
-				return
-			}
+			amfSelf := context.AMF_Self()
+			amfUe.SelectSecurityAlg(amfSelf.SecurityAlgorithm.IntegrityOrder, amfSelf.SecurityAlgorithm.CipheringOrder)
 			// Generate KnasEnc, KnasInt
 			amfUe.DerivateAlgKey()
 			gmm_message.SendSecurityModeCommand(amfUe.RanUe[accessType], accessType, eapSuccess, eapMessage)
@@ -295,7 +262,7 @@ func SecurityMode(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 			err := GmmFSM.SendEvent(state, SecurityModeFailEvent, fsm.ArgsType{
 				ArgAmfUe:      amfUe,
 				ArgAccessType: accessType,
-			}, logger.GmmLog)
+			})
 			if err != nil {
 				logger.GmmLog.Errorln(err)
 			}
@@ -337,7 +304,7 @@ func ContextSetup(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 					err = GmmFSM.SendEvent(state, ContextSetupFailEvent, fsm.ArgsType{
 						ArgAmfUe:      amfUe,
 						ArgAccessType: accessType,
-					}, logger.GmmLog)
+					})
 					if err != nil {
 						logger.GmmLog.Errorln(err)
 					}
@@ -350,7 +317,7 @@ func ContextSetup(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 					err = GmmFSM.SendEvent(state, ContextSetupFailEvent, fsm.ArgsType{
 						ArgAmfUe:      amfUe,
 						ArgAccessType: accessType,
-					}, logger.GmmLog)
+					})
 					if err != nil {
 						logger.GmmLog.Errorln(err)
 					}
@@ -380,7 +347,7 @@ func ContextSetup(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 						err = GmmFSM.SendEvent(state, ContextSetupFailEvent, fsm.ArgsType{
 							ArgAmfUe:      amfUe,
 							ArgAccessType: accessType,
-						}, logger.GmmLog)
+						})
 						if err != nil {
 							logger.GmmLog.Errorln(err)
 						}
@@ -393,7 +360,7 @@ func ContextSetup(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 						err = GmmFSM.SendEvent(state, ContextSetupFailEvent, fsm.ArgsType{
 							ArgAmfUe:      amfUe,
 							ArgAccessType: accessType,
-						}, logger.GmmLog)
+						})
 						if err != nil {
 							logger.GmmLog.Errorln(err)
 						}
@@ -418,7 +385,7 @@ func ContextSetup(state *fsm.State, event fsm.EventType, args fsm.ArgsType) {
 		logger.GmmLog.Debugln(event)
 		amfUe := args[ArgAmfUe].(*context.AmfUe)
 		accessType := args[ArgAccessType].(models.AccessType)
-		if amfUe.UeCmRegistered[accessType] {
+		if amfUe.UeCmRegistered {
 			problemDetails, err := consumer.UeCmDeregistration(amfUe, accessType)
 			if problemDetails != nil {
 				if problemDetails.Cause != "CONTEXT_NOT_FOUND" {

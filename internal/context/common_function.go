@@ -53,16 +53,16 @@ func TacInAreas(targetTac string, areas []models.Area) bool {
 
 func AttachSourceUeTargetUe(sourceUe, targetUe *RanUe) {
 	if sourceUe == nil {
-		logger.CtxLog.Error("Source Ue is Nil")
+		logger.ContextLog.Error("Source Ue is Nil")
 		return
 	}
 	if targetUe == nil {
-		logger.CtxLog.Error("Target Ue is Nil")
+		logger.ContextLog.Error("Target Ue is Nil")
 		return
 	}
 	amfUe := sourceUe.AmfUe
 	if amfUe == nil {
-		logger.CtxLog.Error("AmfUe is Nil")
+		logger.ContextLog.Error("AmfUe is Nil")
 		return
 	}
 	targetUe.AmfUe = amfUe
@@ -72,7 +72,7 @@ func AttachSourceUeTargetUe(sourceUe, targetUe *RanUe) {
 
 func DetachSourceUeTargetUe(ranUe *RanUe) {
 	if ranUe == nil {
-		logger.CtxLog.Error("ranUe is Nil")
+		logger.ContextLog.Error("ranUe is Nil")
 		return
 	}
 	if ranUe.TargetUe != nil {

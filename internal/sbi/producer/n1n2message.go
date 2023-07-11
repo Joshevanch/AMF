@@ -58,14 +58,12 @@ func HandleN1N2MessageTransferRequest(request *httpwrapper.Request) *httpwrapper
 //     response
 //   - problemDetails: if AMF reject the request due to application error, e.g. UE context not found.
 //   - TransferErr: if AMF reject the request due to procedure error, e.g. UE has an ongoing procedure.
-//
 // see TS 29.518 6.1.3.5.3.1 for more details.
 func N1N2MessageTransferProcedure(ueContextID string, reqUri string,
 	n1n2MessageTransferRequest models.N1N2MessageTransferRequest) (
 	n1n2MessageTransferRspData *models.N1N2MessageTransferRspData,
 	locationHeader string, problemDetails *models.ProblemDetails,
-	transferErr *models.N1N2MessageTransferError,
-) {
+	transferErr *models.N1N2MessageTransferError) {
 	var (
 		requestData *models.N1N2MessageTransferReqData = n1n2MessageTransferRequest.JsonData
 		n2Info      []byte                             = n1n2MessageTransferRequest.BinaryDataN2Information
@@ -78,10 +76,9 @@ func N1N2MessageTransferProcedure(ueContextID string, reqUri string,
 		anType    models.AccessType = models.AccessType__3_GPP_ACCESS
 	)
 
-	amfSelf := context.GetSelf()
+	amfSelf := context.AMF_Self()
 
 	if ue, ok = amfSelf.AmfUeFindByUeContextID(ueContextID); !ok {
-		logger.CtxLog.Warnf("AmfUe Context[%s] not found", ueContextID)
 		problemDetails = &models.ProblemDetails{
 			Status: http.StatusNotFound,
 			Cause:  "CONTEXT_NOT_FOUND",
@@ -98,7 +95,6 @@ func N1N2MessageTransferProcedure(ueContextID string, reqUri string,
 			ue.ProducerLog.Debugf("Receive N1 SM Message (PDU Session ID: %d)", requestData.PduSessionId)
 			n1MsgType = nasMessage.PayloadContainerTypeN1SMInfo
 			if smContext, ok = ue.SmContextFindByPDUSessionID(requestData.PduSessionId); !ok {
-				ue.ProducerLog.Errorf("SmContext[PDU Session ID:%d] not found", requestData.PduSessionId)
 				problemDetails = &models.ProblemDetails{
 					Status: http.StatusNotFound,
 					Cause:  "CONTEXT_NOT_FOUND",
@@ -123,7 +119,6 @@ func N1N2MessageTransferProcedure(ueContextID string, reqUri string,
 			ue.ProducerLog.Debugf("Receive N2 SM Message (PDU Session ID: %d)", requestData.PduSessionId)
 			if smContext == nil {
 				if smContext, ok = ue.SmContextFindByPDUSessionID(requestData.PduSessionId); !ok {
-					ue.ProducerLog.Errorf("SmContext[PDU Session ID:%d] not found", requestData.PduSessionId)
 					problemDetails = &models.ProblemDetails{
 						Status: http.StatusNotFound,
 						Cause:  "CONTEXT_NOT_FOUND",
@@ -156,7 +151,7 @@ func N1N2MessageTransferProcedure(ueContextID string, reqUri string,
 			}
 			return nil, "", nil, transferErr
 		}
-		ue.StopT3513()
+		ue.T3513.Stop()
 		callback.SendN1N2TransferFailureNotification(ue, models.N1N2MessageTransferCause_UE_NOT_RESPONDING)
 	case context.OnGoingProcedureRegistration:
 		transferErr = new(models.N1N2MessageTransferError)
@@ -181,8 +176,8 @@ func N1N2MessageTransferProcedure(ueContextID string, reqUri string,
 			err    error
 		)
 		if n1Msg != nil {
-			nasPdu, err = gmm_message.
-				BuildDLNASTransport(ue, anType, n1MsgType, n1Msg, uint8(requestData.PduSessionId), nil, nil, 0)
+			nasPdu, err =
+				gmm_message.BuildDLNASTransport(ue, anType, n1MsgType, n1Msg, uint8(requestData.PduSessionId), nil, nil, 0)
 			if err != nil {
 				ue.ProducerLog.Errorf("Build DL NAS Transport error: %+v", err)
 				problemDetails = &models.ProblemDetails{
@@ -208,15 +203,15 @@ func N1N2MessageTransferProcedure(ueContextID string, reqUri string,
 			switch smInfo.N2InfoContent.NgapIeType {
 			case models.NgapIeType_PDU_RES_SETUP_REQ:
 				ue.ProducerLog.Debugln("AMF Transfer NGAP PDU Session Resource Setup Request from SMF")
-				if ue.RanUe[anType].InitialContextSetup {
+				if ue.RanUe[anType].SentInitialContextSetupRequest {
 					list := ngapType.PDUSessionResourceSetupListSUReq{}
 					ngap_message.AppendPDUSessionResourceSetupListSUReq(&list, smInfo.PduSessionId, *smInfo.SNssai, nasPdu, n2Info)
-					ngap_message.SendPDUSessionResourceSetupRequest(ue.RanUe[anType], nil, &list)
+					ngap_message.SendPDUSessionResourceSetupRequest(ue.RanUe[anType], nil, list)
 				} else {
 					list := ngapType.PDUSessionResourceSetupListCxtReq{}
 					ngap_message.AppendPDUSessionResourceSetupListCxtReq(&list, smInfo.PduSessionId, *smInfo.SNssai, nasPdu, n2Info)
 					ngap_message.SendInitialContextSetupRequest(ue, anType, nil, &list, nil, nil, nil)
-					ue.RanUe[anType].InitialContextSetup = true
+					ue.RanUe[anType].SentInitialContextSetupRequest = true
 				}
 				n1n2MessageTransferRspData = new(models.N1N2MessageTransferRspData)
 				n1n2MessageTransferRspData.Cause = models.N1N2MessageTransferCause_N1_N2_TRANSFER_INITIATED
@@ -285,7 +280,7 @@ func N1N2MessageTransferProcedure(ueContextID string, reqUri string,
 	} else {
 		n1n2MessageID = n1n2MessageIDTmp
 	}
-	locationHeader = context.GetSelf().GetIPv4Uri() + reqUri + "/" + strconv.Itoa(int(n1n2MessageID))
+	locationHeader = context.AMF_Self().GetIPv4Uri() + reqUri + "/" + strconv.Itoa(int(n1n2MessageID))
 
 	// Case A (UE is CM-IDLE in 3GPP access and the associated access type is 3GPP access)
 	// in subclause 5.2.2.3.1.2 of TS29518
@@ -386,22 +381,17 @@ func HandleN1N2MessageTransferStatusRequest(request *httpwrapper.Request) *httpw
 }
 
 func N1N2MessageTransferStatusProcedure(ueContextID string, reqUri string) (models.N1N2MessageTransferCause,
-	*models.ProblemDetails,
-) {
-	amfSelf := context.GetSelf()
+	*models.ProblemDetails) {
+	amfSelf := context.AMF_Self()
 
 	ue, ok := amfSelf.AmfUeFindByUeContextID(ueContextID)
 	if !ok {
-		logger.CtxLog.Warnf("AmfUe Context[%s] not found", ueContextID)
 		problemDetails := &models.ProblemDetails{
 			Status: http.StatusNotFound,
 			Cause:  "CONTEXT_NOT_FOUND",
 		}
 		return "", problemDetails
 	}
-
-	ue.Lock.Lock()
-	defer ue.Lock.Unlock()
 
 	resourceUri := amfSelf.GetIPv4Uri() + reqUri
 	n1n2Message := ue.N1N2Message
@@ -432,22 +422,17 @@ func HandleN1N2MessageSubscirbeRequest(request *httpwrapper.Request) *httpwrappe
 
 func N1N2MessageSubscribeProcedure(ueContextID string,
 	ueN1N2InfoSubscriptionCreateData models.UeN1N2InfoSubscriptionCreateData) (
-	*models.UeN1N2InfoSubscriptionCreatedData, *models.ProblemDetails,
-) {
-	amfSelf := context.GetSelf()
+	*models.UeN1N2InfoSubscriptionCreatedData, *models.ProblemDetails) {
+	amfSelf := context.AMF_Self()
 
 	ue, ok := amfSelf.AmfUeFindByUeContextID(ueContextID)
 	if !ok {
-		logger.CtxLog.Warnf("AmfUe Context[%s] not found", ueContextID)
 		problemDetails := &models.ProblemDetails{
 			Status: http.StatusNotFound,
 			Cause:  "CONTEXT_NOT_FOUND",
 		}
 		return nil, problemDetails
 	}
-
-	ue.Lock.Lock()
-	defer ue.Lock.Unlock()
 
 	ueN1N2InfoSubscriptionCreatedData := new(models.UeN1N2InfoSubscriptionCreatedData)
 
@@ -480,20 +465,16 @@ func HandleN1N2MessageUnSubscribeRequest(request *httpwrapper.Request) *httpwrap
 }
 
 func N1N2MessageUnSubscribeProcedure(ueContextID string, subscriptionID string) *models.ProblemDetails {
-	amfSelf := context.GetSelf()
+	amfSelf := context.AMF_Self()
 
 	ue, ok := amfSelf.AmfUeFindByUeContextID(ueContextID)
 	if !ok {
-		logger.CtxLog.Warnf("AmfUe Context[%s] not found", ueContextID)
 		problemDetails := &models.ProblemDetails{
 			Status: http.StatusNotFound,
 			Cause:  "CONTEXT_NOT_FOUND",
 		}
 		return problemDetails
 	}
-
-	ue.Lock.Lock()
-	defer ue.Lock.Unlock()
 
 	ue.N1N2MessageSubscription.Delete(subscriptionID)
 	return nil

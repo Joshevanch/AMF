@@ -4,24 +4,21 @@ import (
 	"encoding/hex"
 	"io"
 	"net"
-	"runtime/debug"
 	"sync"
 	"syscall"
 
 	"git.cs.nctu.edu.tw/calee/sctp"
 
 	"github.com/free5gc/amf/internal/logger"
-	"github.com/free5gc/amf/pkg/factory"
 	"github.com/free5gc/ngap"
 )
 
 type NGAPHandler struct {
-	HandleMessage         func(conn net.Conn, msg []byte)
-	HandleNotification    func(conn net.Conn, notification sctp.Notification)
-	HandleConnectionError func(conn net.Conn)
+	HandleMessage      func(conn net.Conn, msg []byte)
+	HandleNotification func(conn net.Conn, notification sctp.Notification)
 }
 
-const readBufSize uint32 = 262144
+const readBufSize uint32 = 8192
 
 // set default read timeout to 2 seconds
 var readTimeout syscall.Timeval = syscall.Timeval{Sec: 2, Usec: 0}
@@ -31,21 +28,13 @@ var (
 	connections  sync.Map
 )
 
-func NewSctpConfig(cfg *factory.Sctp) *sctp.SocketConfig {
-	sctpConfig := &sctp.SocketConfig{
-		InitMsg: sctp.InitMsg{
-			NumOstreams:    uint16(cfg.NumOstreams),
-			MaxInstreams:   uint16(cfg.MaxInstreams),
-			MaxAttempts:    uint16(cfg.MaxAttempts),
-			MaxInitTimeout: uint16(cfg.MaxInitTimeout),
-		},
-		RtoInfo:   &sctp.RtoInfo{SrtoAssocID: 0, SrtoInitial: 500, SrtoMax: 1500, StroMin: 100},
-		AssocInfo: &sctp.AssocInfo{AsocMaxRxt: 4},
-	}
-	return sctpConfig
+var sctpConfig sctp.SocketConfig = sctp.SocketConfig{
+	InitMsg:   sctp.InitMsg{NumOstreams: 3, MaxInstreams: 5, MaxAttempts: 2, MaxInitTimeout: 2},
+	RtoInfo:   &sctp.RtoInfo{SrtoAssocID: 0, SrtoInitial: 500, SrtoMax: 1500, StroMin: 100},
+	AssocInfo: &sctp.AssocInfo{AsocMaxRxt: 4},
 }
 
-func Run(addresses []string, port int, handler NGAPHandler, sctpConfig *sctp.SocketConfig) {
+func Run(addresses []string, port int, handler NGAPHandler) {
 	ips := []net.IPAddr{}
 
 	for _, addr := range addresses {
@@ -62,22 +51,10 @@ func Run(addresses []string, port int, handler NGAPHandler, sctpConfig *sctp.Soc
 		Port:    port,
 	}
 
-	go listenAndServe(addr, handler, sctpConfig)
+	go listenAndServe(addr, handler)
 }
 
-func listenAndServe(addr *sctp.SCTPAddr, handler NGAPHandler, sctpConfig *sctp.SocketConfig) {
-	defer func() {
-		if p := recover(); p != nil {
-			// Print stack for panic to log. Fatalf() will let program exit.
-			logger.NgapLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
-		}
-	}()
-
-	if sctpConfig == nil {
-		logger.NgapLog.Errorf("Error sctp SocketConfig is nil")
-		return
-	}
-
+func listenAndServe(addr *sctp.SCTPAddr, handler NGAPHandler) {
 	if listener, err := sctpConfig.Listen("sctp", addr); err != nil {
 		logger.NgapLog.Errorf("Failed to listen: %+v", err)
 		return
@@ -152,7 +129,8 @@ func listenAndServe(addr *sctp.SCTPAddr, handler NGAPHandler, sctpConfig *sctp.S
 		} else {
 			logger.NgapLog.Debugf("Set read timeout: %+v", readTimeout)
 		}
-		logger.NgapLog.Infof("[AMF] SCTP Accept from: %+v", newConn.RemoteAddr())
+
+		logger.NgapLog.Infof("[AMF] SCTP Accept from: %s", newConn.RemoteAddr().String())
 		connections.Store(newConn, newConn)
 
 		go handleConnection(newConn, readBufSize, handler)
@@ -179,11 +157,6 @@ func Stop() {
 
 func handleConnection(conn *sctp.SCTPConn, bufsize uint32, handler NGAPHandler) {
 	defer func() {
-		if p := recover(); p != nil {
-			// Print stack for panic to log. Fatalf() will let program exit.
-			logger.NgapLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
-		}
-
 		// if AMF call Stop(), then conn.Close() will return EBADF because conn has been closed inside Stop()
 		if err := conn.Close(); err != nil && err != syscall.EBADF {
 			logger.NgapLog.Errorf("close connection error: %+v", err)
@@ -199,7 +172,6 @@ func handleConnection(conn *sctp.SCTPConn, bufsize uint32, handler NGAPHandler) 
 			switch err {
 			case io.EOF, io.ErrUnexpectedEOF:
 				logger.NgapLog.Debugln("Read EOF from client")
-				handler.HandleConnectionError(conn)
 				return
 			case syscall.EAGAIN:
 				logger.NgapLog.Debugln("SCTP read timeout")
@@ -208,12 +180,7 @@ func handleConnection(conn *sctp.SCTPConn, bufsize uint32, handler NGAPHandler) 
 				logger.NgapLog.Debugf("SCTPRead: %+v", err)
 				continue
 			default:
-				logger.NgapLog.Errorf(
-					"Handle connection[addr: %+v] error: %+v",
-					conn.RemoteAddr(),
-					err,
-				)
-				handler.HandleConnectionError(conn)
+				logger.NgapLog.Errorf("Handle connection[addr: %+v] error: %+v", conn.RemoteAddr(), err)
 				return
 			}
 		}

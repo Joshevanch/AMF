@@ -60,10 +60,10 @@ type RanUe struct {
 	OldAmfName            string
 	InitialUEMessage      []byte
 	RRCEstablishmentCause string // Received from initial ue message; pattern: ^[0-9a-fA-F]+$
-	UeContextRequest      bool   // Receive UEContextRequest IE from RAN
+	UeContextRequest      bool
 
 	/* send initial context setup request or not*/
-	InitialContextSetup bool
+	SentInitialContextSetupRequest bool
 
 	/* logger */
 	Log *logrus.Entry
@@ -82,9 +82,13 @@ func (ranUe *RanUe) Remove() error {
 		ranUe.DetachAmfUe()
 	}
 
-	ran.RanUeList.Delete(ranUe.RanUeNgapId)
-
-	self := GetSelf()
+	for index, ranUe1 := range ran.RanUeList {
+		if ranUe1 == ranUe {
+			ran.RanUeList = append(ran.RanUeList[:index], ran.RanUeList[index+1:]...)
+			break
+		}
+	}
+	self := AMF_Self()
 	self.RanUePool.Delete(ranUe.AmfUeNgapId)
 	amfUeNGAPIDGenerator.FreeID(ranUe.AmfUeNgapId)
 	return nil
@@ -106,10 +110,15 @@ func (ranUe *RanUe) SwitchToRan(newRan *AmfRan, ranUeNgapId int64) error {
 	oldRan := ranUe.Ran
 
 	// remove ranUe from oldRan
-	oldRan.RanUeList.Delete(ranUe.RanUeNgapId)
+	for index, ranUe1 := range oldRan.RanUeList {
+		if ranUe1 == ranUe {
+			oldRan.RanUeList = append(oldRan.RanUeList[:index], oldRan.RanUeList[index+1:]...)
+			break
+		}
+	}
 
 	// add ranUe to newRan
-	newRan.RanUeList.Store(ranUeNgapId, ranUe)
+	newRan.RanUeList = append(newRan.RanUeList, ranUe)
 
 	// switch to newRan
 	ranUe.Ran = newRan
@@ -118,26 +127,8 @@ func (ranUe *RanUe) SwitchToRan(newRan *AmfRan, ranUeNgapId int64) error {
 	// update log information
 	ranUe.UpdateLogFields()
 
-	logger.CtxLog.Infof("RanUe[RanUeNgapID: %d] Switch to new Ran[Name: %s]", ranUe.RanUeNgapId, ranUe.Ran.Name)
+	logger.ContextLog.Infof("RanUe[RanUeNgapID: %d] Switch to new Ran[Name: %s]", ranUe.RanUeNgapId, ranUe.Ran.Name)
 	return nil
-}
-
-func (ranUe *RanUe) UpdateLogFields() {
-	if ranUe.Ran != nil && ranUe.Ran.Conn != nil {
-		ranUe.Log = ranUe.Log.WithField(logger.FieldRanAddr, ranUe.Ran.Conn.RemoteAddr().String())
-
-		anTypeStr := ""
-		if ranUe.Ran.AnType == models.AccessType__3_GPP_ACCESS {
-			anTypeStr = "3GPP"
-		} else if ranUe.Ran.AnType == models.AccessType_NON_3_GPP_ACCESS {
-			anTypeStr = "Non3GPP"
-		}
-		ranUe.Log = ranUe.Log.WithField(logger.FieldAmfUeNgapID,
-			fmt.Sprintf("RU:%d,AU:%d(%s)", ranUe.RanUeNgapId, ranUe.AmfUeNgapId, anTypeStr))
-	} else {
-		ranUe.Log = ranUe.Log.WithField(logger.FieldRanAddr, "no ran conn")
-		ranUe.Log = ranUe.Log.WithField(logger.FieldAmfUeNgapID, "RU:,AU:")
-	}
 }
 
 func (ranUe *RanUe) UpdateLocation(userLocationInformation *ngapType.UserLocationInformation) {
@@ -145,7 +136,7 @@ func (ranUe *RanUe) UpdateLocation(userLocationInformation *ngapType.UserLocatio
 		return
 	}
 
-	amfSelf := GetSelf()
+	amfSelf := AMF_Self()
 	curTime := time.Now().UTC()
 	switch userLocationInformation.Present {
 	case ngapType.UserLocationInformationPresentUserLocationInformationEUTRA:
@@ -251,4 +242,15 @@ func (ranUe *RanUe) UpdateLocation(userLocationInformation *ngapType.UserLocatio
 		}
 	case ngapType.UserLocationInformationPresentNothing:
 	}
+}
+
+func (ranUe *RanUe) UpdateLogFields() {
+	ngapLog := logger.NgapLog
+
+	if ranUe.Ran != nil && ranUe.Ran.Conn != nil {
+		ngapLog = ngapLog.WithField(logger.FieldRanAddr, ranUe.Ran.Conn.RemoteAddr().String())
+		ngapLog = ngapLog.WithField(logger.FieldAmfUeNgapID, fmt.Sprintf("AMF_UE_NGAP_ID:%d", ranUe.AmfUeNgapId))
+	}
+
+	ranUe.Log = ngapLog
 }

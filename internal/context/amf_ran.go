@@ -3,7 +3,6 @@ package context
 import (
 	"fmt"
 	"net"
-	"sync"
 
 	"github.com/sirupsen/logrus"
 
@@ -30,7 +29,7 @@ type AmfRan struct {
 	SupportedTAList []SupportedTAI
 
 	/* RAN UE List */
-	RanUeList sync.Map // RanUeNgapId as key
+	RanUeList []*RanUe // RanUeNgapId as key
 
 	/* logger */
 	Log *logrus.Entry
@@ -48,13 +47,13 @@ func NewSupportedTAI() (tai SupportedTAI) {
 
 func (ran *AmfRan) Remove() {
 	ran.Log.Infof("Remove RAN Context[ID: %+v]", ran.RanID())
-	ran.RemoveAllRanUe(true)
-	GetSelf().DeleteAmfRan(ran.Conn)
+	ran.RemoveAllUeInRan()
+	AMF_Self().DeleteAmfRan(ran.Conn)
 }
 
 func (ran *AmfRan) NewRanUe(ranUeNgapID int64) (*RanUe, error) {
 	ranUe := RanUe{}
-	self := GetSelf()
+	self := AMF_Self()
 	amfUeNgapID, err := self.AllocateAmfUeNgapID()
 	if err != nil {
 		return nil, fmt.Errorf("Allocate AMF UE NGAP ID error: %+v", err)
@@ -62,48 +61,30 @@ func (ran *AmfRan) NewRanUe(ranUeNgapID int64) (*RanUe, error) {
 	ranUe.AmfUeNgapId = amfUeNgapID
 	ranUe.RanUeNgapId = ranUeNgapID
 	ranUe.Ran = ran
-	ranUe.Log = ran.Log
 	ranUe.UpdateLogFields()
 
-	if ranUeNgapID != RanUeNgapIdUnspecified {
-		// store to RanUeList only when RANUENGAPID is specified
-		// (otherwise, will be stored only in amfContext.RanUePool)
-		ran.RanUeList.Store(ranUeNgapID, &ranUe)
-	}
+	ran.RanUeList = append(ran.RanUeList, &ranUe)
 	self.RanUePool.Store(ranUe.AmfUeNgapId, &ranUe)
-	ranUe.Log.Infof("New RanUe [RanUeNgapID:%d][AmfUeNgapID:%d]", ranUe.RanUeNgapId, ranUe.AmfUeNgapId)
 	return &ranUe, nil
 }
 
-func (ran *AmfRan) RemoveAllRanUe(removeAmfUe bool) {
-	// Using revered removal since ranUe.Remove() will also modify the slice r.RanUeList
-	ran.RanUeList.Range(func(k, v interface{}) bool {
-		ranUe := v.(*RanUe)
+func (ran *AmfRan) RemoveAllUeInRan() {
+	saveRanUeList := make([]*RanUe, len(ran.RanUeList))
+	copy(saveRanUeList, ran.RanUeList)
+	for _, ranUe := range saveRanUeList {
 		if err := ranUe.Remove(); err != nil {
-			logger.CtxLog.Errorf("Remove RanUe error: %v", err)
+			logger.ContextLog.Errorf("Remove RanUe error: %v", err)
 		}
-		return true
-	})
+	}
 }
 
 func (ran *AmfRan) RanUeFindByRanUeNgapID(ranUeNgapID int64) *RanUe {
-	if value, ok := ran.RanUeList.Load(ranUeNgapID); ok {
-		return value.(*RanUe)
+	for _, ranUe := range ran.RanUeList {
+		if ranUe.RanUeNgapId == ranUeNgapID {
+			return ranUe
+		}
 	}
 	return nil
-}
-
-func (ran *AmfRan) FindRanUeByAmfUeNgapID(amfUeNgapID int64) *RanUe {
-	var ru *RanUe
-	ran.RanUeList.Range(func(k, v interface{}) bool {
-		ranUe := v.(*RanUe)
-		if ranUe.AmfUeNgapId == amfUeNgapID {
-			ru = ranUe
-			return false
-		}
-		return true
-	})
-	return ru
 }
 
 func (ran *AmfRan) SetRanId(ranNodeId *ngapType.GlobalRANNodeID) {

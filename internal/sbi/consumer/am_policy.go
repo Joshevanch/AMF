@@ -6,7 +6,6 @@ import (
 
 	amf_context "github.com/free5gc/amf/internal/context"
 	"github.com/free5gc/amf/internal/logger"
-	"github.com/free5gc/amf/pkg/factory"
 	"github.com/free5gc/openapi"
 	"github.com/free5gc/openapi/Npcf_AMPolicy"
 	"github.com/free5gc/openapi/models"
@@ -17,10 +16,10 @@ func AMPolicyControlCreate(ue *amf_context.AmfUe, anType models.AccessType) (*mo
 	configuration.SetBasePath(ue.PcfUri)
 	client := Npcf_AMPolicy.NewAPIClient(configuration)
 
-	amfSelf := amf_context.GetSelf()
+	amfSelf := amf_context.AMF_Self()
 
 	policyAssociationRequest := models.PolicyAssociationRequest{
-		NotificationUri: amfSelf.GetIPv4Uri() + factory.AmfCallbackResUriPrefix + "/am-policy/",
+		NotificationUri: amfSelf.GetIPv4Uri() + "/namf-callback/v1/am-policy/",
 		Supi:            ue.Supi,
 		Pei:             ue.Pei,
 		Gpsi:            ue.Gpsi,
@@ -37,14 +36,6 @@ func AMPolicyControlCreate(ue *amf_context.AmfUe, anType models.AccessType) (*mo
 	}
 
 	res, httpResp, localErr := client.DefaultApi.PoliciesPost(context.Background(), policyAssociationRequest)
-	defer func() {
-		if httpResp != nil {
-			if rspCloseErr := httpResp.Body.Close(); rspCloseErr != nil {
-				logger.ConsumerLog.Errorf("PoliciesPost response body cannot close: %+v",
-					rspCloseErr)
-			}
-		}
-	}()
 	if localErr == nil {
 		locationHeader := httpResp.Header.Get("Location")
 		logger.ConsumerLog.Debugf("location header: %+v", locationHeader)
@@ -82,22 +73,13 @@ func AMPolicyControlCreate(ue *amf_context.AmfUe, anType models.AccessType) (*mo
 }
 
 func AMPolicyControlUpdate(ue *amf_context.AmfUe, updateRequest models.PolicyAssociationUpdateRequest) (
-	problemDetails *models.ProblemDetails, err error,
-) {
+	problemDetails *models.ProblemDetails, err error) {
 	configuration := Npcf_AMPolicy.NewConfiguration()
 	configuration.SetBasePath(ue.PcfUri)
 	client := Npcf_AMPolicy.NewAPIClient(configuration)
 
 	res, httpResp, localErr := client.DefaultApi.PoliciesPolAssoIdUpdatePost(
 		context.Background(), ue.PolicyAssociationId, updateRequest)
-	defer func() {
-		if httpResp != nil {
-			if rspCloseErr := httpResp.Body.Close(); rspCloseErr != nil {
-				logger.ConsumerLog.Errorf("PoliciesPolAssoIdUpdatePost response body cannot close: %+v",
-					rspCloseErr)
-			}
-		}
-	}()
 	if localErr == nil {
 		if res.ServAreaRes != nil {
 			ue.AmPolicyAssociation.ServAreaRes = res.ServAreaRes
@@ -135,14 +117,6 @@ func AMPolicyControlDelete(ue *amf_context.AmfUe) (problemDetails *models.Proble
 	client := Npcf_AMPolicy.NewAPIClient(configuration)
 
 	httpResp, localErr := client.DefaultApi.PoliciesPolAssoIdDelete(context.Background(), ue.PolicyAssociationId)
-	defer func() {
-		if httpResp != nil {
-			if rspCloseErr := httpResp.Body.Close(); rspCloseErr != nil {
-				logger.ConsumerLog.Errorf("PoliciesPolAssoIdDelete response body cannot close: %+v",
-					rspCloseErr)
-			}
-		}
-	}()
 	if localErr == nil {
 		ue.RemoveAmPolicyAssociation()
 	} else if httpResp != nil {

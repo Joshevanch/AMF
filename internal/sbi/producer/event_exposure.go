@@ -30,9 +30,8 @@ func HandleCreateAMFEventSubscription(request *httpwrapper.Request) *httpwrapper
 
 // TODO: handle event filter
 func CreateAMFEventSubscriptionProcedure(createEventSubscription models.AmfCreateEventSubscription) (
-	*models.AmfCreatedEventSubscription, *models.ProblemDetails,
-) {
-	amfSelf := context.GetSelf()
+	*models.AmfCreatedEventSubscription, *models.ProblemDetails) {
+	amfSelf := context.AMF_Self()
 
 	createdEventSubscription := &models.AmfCreatedEventSubscription{}
 	subscription := createEventSubscription.Subscription
@@ -73,11 +72,9 @@ func CreateAMFEventSubscriptionProcedure(createEventSubscription models.AmfCreat
 		ueEventSubscription.AnyUe = true
 		amfSelf.UePool.Range(func(key, value interface{}) bool {
 			ue := value.(*context.AmfUe)
-			ue.Lock.Lock()
 			ue.EventSubscriptionsInfo[newSubscriptionID] = new(context.AmfUeEventSubscription)
 			*ue.EventSubscriptionsInfo[newSubscriptionID] = ueEventSubscription
 			contextEventSubscription.UeSupiList = append(contextEventSubscription.UeSupiList, ue.Supi)
-			ue.Lock.Unlock()
 			return true
 		})
 	} else if subscription.GroupId != "" {
@@ -85,13 +82,11 @@ func CreateAMFEventSubscriptionProcedure(createEventSubscription models.AmfCreat
 		ueEventSubscription.AnyUe = true
 		amfSelf.UePool.Range(func(key, value interface{}) bool {
 			ue := value.(*context.AmfUe)
-			ue.Lock.Lock()
 			if ue.GroupID == subscription.GroupId {
 				ue.EventSubscriptionsInfo[newSubscriptionID] = new(context.AmfUeEventSubscription)
 				*ue.EventSubscriptionsInfo[newSubscriptionID] = ueEventSubscription
 				contextEventSubscription.UeSupiList = append(contextEventSubscription.UeSupiList, ue.Supi)
 			}
-			ue.Lock.Unlock()
 			return true
 		})
 	} else {
@@ -102,11 +97,9 @@ func CreateAMFEventSubscriptionProcedure(createEventSubscription models.AmfCreat
 			}
 			return nil, problemDetails
 		} else {
-			ue.Lock.Lock()
 			ue.EventSubscriptionsInfo[newSubscriptionID] = new(context.AmfUeEventSubscription)
 			*ue.EventSubscriptionsInfo[newSubscriptionID] = ueEventSubscription
 			contextEventSubscription.UeSupiList = append(contextEventSubscription.UeSupiList, ue.Supi)
-			ue.Lock.Unlock()
 		}
 	}
 
@@ -125,15 +118,12 @@ func CreateAMFEventSubscriptionProcedure(createEventSubscription models.AmfCreat
 	if subscription.AnyUE {
 		amfSelf.UePool.Range(func(key, value interface{}) bool {
 			ue := value.(*context.AmfUe)
-			ue.Lock.Lock()
-			defer ue.Lock.Unlock()
-
 			if isImmediate {
 				subReports(ue, newSubscriptionID)
 			}
 			for i, flag := range immediateFlags {
 				if flag {
-					report, ok := newAmfEventReport(ue, (*subscription.EventList)[i].Type, newSubscriptionID)
+					report, ok := NewAmfEventReport(ue, (*subscription.EventList)[i].Type, newSubscriptionID)
 					if ok {
 						reportlist = append(reportlist, report)
 					}
@@ -148,16 +138,13 @@ func CreateAMFEventSubscriptionProcedure(createEventSubscription models.AmfCreat
 	} else if subscription.GroupId != "" {
 		amfSelf.UePool.Range(func(key, value interface{}) bool {
 			ue := value.(*context.AmfUe)
-			ue.Lock.Lock()
-			defer ue.Lock.Unlock()
-
 			if isImmediate {
 				subReports(ue, newSubscriptionID)
 			}
 			if ue.GroupID == subscription.GroupId {
 				for i, flag := range immediateFlags {
 					if flag {
-						report, ok := newAmfEventReport(ue, (*subscription.EventList)[i].Type, newSubscriptionID)
+						report, ok := NewAmfEventReport(ue, (*subscription.EventList)[i].Type, newSubscriptionID)
 						if ok {
 							reportlist = append(reportlist, report)
 						}
@@ -172,15 +159,12 @@ func CreateAMFEventSubscriptionProcedure(createEventSubscription models.AmfCreat
 		})
 	} else {
 		ue, _ := amfSelf.AmfUeFindBySupi(subscription.Supi)
-		ue.Lock.Lock()
-		defer ue.Lock.Unlock()
-
 		if isImmediate {
 			subReports(ue, newSubscriptionID)
 		}
 		for i, flag := range immediateFlags {
 			if flag {
-				report, ok := newAmfEventReport(ue, (*subscription.EventList)[i].Type, newSubscriptionID)
+				report, ok := NewAmfEventReport(ue, (*subscription.EventList)[i].Type, newSubscriptionID)
 				if ok {
 					reportlist = append(reportlist, report)
 				}
@@ -216,7 +200,7 @@ func HandleDeleteAMFEventSubscription(request *httpwrapper.Request) *httpwrapper
 }
 
 func DeleteAMFEventSubscriptionProcedure(subscriptionID string) *models.ProblemDetails {
-	amfSelf := context.GetSelf()
+	amfSelf := context.AMF_Self()
 
 	subscription, ok := amfSelf.FindEventSubscription(subscriptionID)
 	if !ok {
@@ -229,9 +213,7 @@ func DeleteAMFEventSubscriptionProcedure(subscriptionID string) *models.ProblemD
 
 	for _, supi := range subscription.UeSupiList {
 		if ue, ok := amfSelf.AmfUeFindBySupi(supi); ok {
-			ue.Lock.Lock()
 			delete(ue.EventSubscriptionsInfo, subscriptionID)
-			ue.Lock.Unlock()
 		}
 	}
 	amfSelf.DeleteEventSubscription(subscriptionID)
@@ -262,9 +244,8 @@ func HandleModifyAMFEventSubscription(request *httpwrapper.Request) *httpwrapper
 func ModifyAMFEventSubscriptionProcedure(
 	subscriptionID string,
 	modifySubscriptionRequest models.ModifySubscriptionRequest) (
-	*models.AmfUpdatedEventSubscription, *models.ProblemDetails,
-) {
-	amfSelf := context.GetSelf()
+	*models.AmfUpdatedEventSubscription, *models.ProblemDetails) {
+	amfSelf := context.AMF_Self()
 
 	contextSubscription, ok := amfSelf.FindEventSubscription(subscriptionID)
 	if !ok {
@@ -330,9 +311,8 @@ func subReports(ue *context.AmfUe, subscriptionId string) {
 }
 
 // DO NOT handle AmfEventType_PRESENCE_IN_AOI_REPORT and AmfEventType_UES_IN_AREA_REPORT(about area)
-func newAmfEventReport(ue *context.AmfUe, Type models.AmfEventType, subscriptionId string) (
-	report models.AmfEventReport, ok bool,
-) {
+func NewAmfEventReport(ue *context.AmfUe, Type models.AmfEventType, subscriptionId string) (
+	report models.AmfEventReport, ok bool) {
 	ueSubscription, ok := ue.EventSubscriptionsInfo[subscriptionId]
 	if !ok {
 		return report, ok

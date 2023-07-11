@@ -1,26 +1,27 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime/debug"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/urfave/cli"
 
 	"github.com/free5gc/amf/internal/logger"
-	"github.com/free5gc/amf/pkg/factory"
+	"github.com/free5gc/amf/internal/util"
 	"github.com/free5gc/amf/pkg/service"
-	logger_util "github.com/free5gc/util/logger"
 	"github.com/free5gc/util/version"
 )
 
-var AMF *service.AmfApp
+var AMF = &service.AMF{}
 
 func main() {
 	defer func() {
 		if p := recover(); p != nil {
 			// Print stack for panic to log. Fatalf() will let program exit.
-			logger.MainLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+			logger.AppLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
 		}
 	}()
 
@@ -28,68 +29,59 @@ func main() {
 	app.Name = "amf"
 	app.Usage = "5G Access and Mobility Management Function (AMF)"
 	app.Action = action
-	app.Flags = []cli.Flag{
-		cli.StringFlag{
-			Name:  "config, c",
-			Usage: "Load configuration from `FILE`",
-		},
-		cli.StringSliceFlag{
-			Name:  "log, l",
-			Usage: "Output NF log to `FILE`",
-		},
-	}
+	app.Flags = AMF.GetCliCmd()
 	if err := app.Run(os.Args); err != nil {
-		logger.MainLog.Errorf("AMF Run error: %v\n", err)
+		logger.AppLog.Errorf("AMF Run error: %v\n", err)
 		return
 	}
 }
 
-func action(cliCtx *cli.Context) error {
-	tlsKeyLogPath, err := initLogFile(cliCtx.StringSlice("log"))
-	if err != nil {
+func action(c *cli.Context) error {
+	if err := initLogFile(c.String("log"), c.String("log5gc")); err != nil {
+		logger.AppLog.Errorf("%+v", err)
 		return err
 	}
 
-	logger.MainLog.Infoln("AMF version: ", version.GetVersion())
+	if err := AMF.Initialize(c); err != nil {
+		switch err1 := err.(type) {
+		case govalidator.Errors:
+			errs := err1.Errors()
+			for _, e := range errs {
+				logger.CfgLog.Errorf("%+v", e)
+			}
+		default:
+			logger.CfgLog.Errorf("%+v", err)
+		}
 
-	cfg, err := factory.ReadConfig(cliCtx.String("config"))
-	if err != nil {
-		return err
+		logger.CfgLog.Errorf("[-- PLEASE REFER TO SAMPLE CONFIG FILE COMMENTS --]")
+		return fmt.Errorf("Failed to initialize !!")
 	}
-	factory.AmfConfig = cfg
 
-	amf, err := service.NewApp(cfg)
-	if err != nil {
-		return err
-	}
-	AMF = amf
+	logger.AppLog.Infoln(c.App.Name)
+	logger.AppLog.Infoln("AMF version: ", version.GetVersion())
 
-	amf.Start(tlsKeyLogPath)
+	AMF.Start()
 
 	return nil
 }
 
-func initLogFile(logNfPath []string) (string, error) {
-	logTlsKeyPath := ""
+func initLogFile(logNfPath, log5gcPath string) error {
+	AMF.KeyLogPath = util.AmfDefaultKeyLogPath
 
-	for _, path := range logNfPath {
-		if err := logger_util.LogFileHook(logger.Log, path); err != nil {
-			return "", err
-		}
+	if err := logger.LogFileHook(logNfPath, log5gcPath); err != nil {
+		return err
+	}
 
-		if logTlsKeyPath != "" {
-			continue
-		}
-
-		nfDir, _ := filepath.Split(path)
+	if logNfPath != "" {
+		nfDir, _ := filepath.Split(logNfPath)
 		tmpDir := filepath.Join(nfDir, "key")
 		if err := os.MkdirAll(tmpDir, 0o775); err != nil {
 			logger.InitLog.Errorf("Make directory %s failed: %+v", tmpDir, err)
-			return "", err
+			return err
 		}
-		_, name := filepath.Split(factory.AmfDefaultTLSKeyLogPath)
-		logTlsKeyPath = filepath.Join(tmpDir, name)
+		_, name := filepath.Split(util.AmfDefaultKeyLogPath)
+		AMF.KeyLogPath = filepath.Join(tmpDir, name)
 	}
 
-	return logTlsKeyPath, nil
+	return nil
 }

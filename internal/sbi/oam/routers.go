@@ -7,7 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/free5gc/amf/internal/logger"
-	"github.com/free5gc/amf/pkg/factory"
 	logger_util "github.com/free5gc/util/logger"
 )
 
@@ -47,7 +46,7 @@ func NewRouter() *gin.Engine {
 }
 
 func AddService(engine *gin.Engine) *gin.RouterGroup {
-	group := engine.Group(factory.AmfOamResUriPrefix)
+	group := engine.Group("/namf-oam/v1")
 
 	for _, route := range routes {
 		switch route.Method {

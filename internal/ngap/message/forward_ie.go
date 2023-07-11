@@ -11,8 +11,7 @@ import (
 )
 
 func AppendPDUSessionResourceSetupListSUReq(list *ngapType.PDUSessionResourceSetupListSUReq,
-	pduSessionId int32, snssai models.Snssai, nasPDU []byte, transfer []byte,
-) {
+	pduSessionId int32, snssai models.Snssai, nasPDU []byte, transfer []byte) {
 	var item ngapType.PDUSessionResourceSetupItemSUReq
 	item.PDUSessionID.Value = int64(pduSessionId)
 	item.SNSSAI = ngapConvert.SNssaiToNgap(snssai)
@@ -25,8 +24,7 @@ func AppendPDUSessionResourceSetupListSUReq(list *ngapType.PDUSessionResourceSet
 }
 
 func AppendPDUSessionResourceSetupListHOReq(list *ngapType.PDUSessionResourceSetupListHOReq,
-	pduSessionId int32, snssai models.Snssai, transfer []byte,
-) {
+	pduSessionId int32, snssai models.Snssai, transfer []byte) {
 	var item ngapType.PDUSessionResourceSetupItemHOReq
 	item.PDUSessionID.Value = int64(pduSessionId)
 	item.SNSSAI = ngapConvert.SNssaiToNgap(snssai)
@@ -35,8 +33,7 @@ func AppendPDUSessionResourceSetupListHOReq(list *ngapType.PDUSessionResourceSet
 }
 
 func AppendPDUSessionResourceSetupListCxtReq(list *ngapType.PDUSessionResourceSetupListCxtReq,
-	pduSessionId int32, snssai models.Snssai, nasPDU []byte, transfer []byte,
-) {
+	pduSessionId int32, snssai models.Snssai, nasPDU []byte, transfer []byte) {
 	var item ngapType.PDUSessionResourceSetupItemCxtReq
 	item.PDUSessionID.Value = int64(pduSessionId)
 	item.SNSSAI = ngapConvert.SNssaiToNgap(snssai)
@@ -48,27 +45,8 @@ func AppendPDUSessionResourceSetupListCxtReq(list *ngapType.PDUSessionResourceSe
 	list.List = append(list.List, item)
 }
 
-func ConvertPDUSessionResourceSetupListCxtReqToSUReq(
-	listCxtReq *ngapType.PDUSessionResourceSetupListCxtReq,
-) *ngapType.PDUSessionResourceSetupListSUReq {
-	if listCxtReq == nil {
-		return nil
-	}
-	listSUReq := ngapType.PDUSessionResourceSetupListSUReq{}
-	for _, itemCxt := range listCxtReq.List {
-		var itemSU ngapType.PDUSessionResourceSetupItemSUReq
-		itemSU.PDUSessionID = itemCxt.PDUSessionID
-		itemSU.PDUSessionNASPDU = itemCxt.NASPDU
-		itemSU.SNSSAI = itemCxt.SNSSAI
-		itemSU.PDUSessionResourceSetupRequestTransfer = itemCxt.PDUSessionResourceSetupRequestTransfer
-		listSUReq.List = append(listSUReq.List, itemSU)
-	}
-	return &listSUReq
-}
-
 func AppendPDUSessionResourceModifyListModReq(list *ngapType.PDUSessionResourceModifyListModReq,
-	pduSessionId int32, nasPDU []byte, transfer []byte,
-) {
+	pduSessionId int32, nasPDU []byte, transfer []byte) {
 	var item ngapType.PDUSessionResourceModifyItemModReq
 	item.PDUSessionID.Value = int64(pduSessionId)
 	item.PDUSessionResourceModifyRequestTransfer = transfer
@@ -80,8 +58,7 @@ func AppendPDUSessionResourceModifyListModReq(list *ngapType.PDUSessionResourceM
 }
 
 func AppendPDUSessionResourceModifyListModCfm(list *ngapType.PDUSessionResourceModifyListModCfm,
-	pduSessionId int64, transfer []byte,
-) {
+	pduSessionId int64, transfer []byte) {
 	var item ngapType.PDUSessionResourceModifyItemModCfm
 	item.PDUSessionID.Value = pduSessionId
 	item.PDUSessionResourceModifyConfirmTransfer = transfer
@@ -89,8 +66,7 @@ func AppendPDUSessionResourceModifyListModCfm(list *ngapType.PDUSessionResourceM
 }
 
 func AppendPDUSessionResourceFailedToModifyListModCfm(list *ngapType.PDUSessionResourceFailedToModifyListModCfm,
-	pduSessionId int64, transfer []byte,
-) {
+	pduSessionId int64, transfer []byte) {
 	var item ngapType.PDUSessionResourceFailedToModifyItemModCfm
 	item.PDUSessionID.Value = pduSessionId
 	item.PDUSessionResourceModifyIndicationUnsuccessfulTransfer = transfer
@@ -98,8 +74,7 @@ func AppendPDUSessionResourceFailedToModifyListModCfm(list *ngapType.PDUSessionR
 }
 
 func AppendPDUSessionResourceToReleaseListRelCmd(list *ngapType.PDUSessionResourceToReleaseListRelCmd,
-	pduSessionId int32, transfer []byte,
-) {
+	pduSessionId int32, transfer []byte) {
 	var item ngapType.PDUSessionResourceToReleaseItemRelCmd
 	item.PDUSessionID.Value = int64(pduSessionId)
 	item.PDUSessionResourceReleaseCommandTransfer = transfer

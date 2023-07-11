@@ -10,9 +10,7 @@ import (
 	"github.com/antihax/optional"
 
 	amf_context "github.com/free5gc/amf/internal/context"
-	"github.com/free5gc/amf/internal/logger"
 	"github.com/free5gc/amf/internal/util"
-	"github.com/free5gc/amf/pkg/factory"
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/openapi"
 	"github.com/free5gc/openapi/Nnrf_NFDiscovery"
@@ -25,8 +23,7 @@ func SelectSmf(
 	anType models.AccessType,
 	pduSessionID int32,
 	snssai models.Snssai,
-	dnn string,
-) (*amf_context.SmContext, uint8, error) {
+	dnn string) (*amf_context.SmContext, uint8, error) {
 	var (
 		smfID  string
 		smfUri string
@@ -87,8 +84,8 @@ func SelectSmf(
 	if ue.PlmnId.Mcc != "" {
 		param.TargetPlmnList = optional.NewInterface(openapi.MarshToJsonString(ue.PlmnId))
 	}
-	if amf_context.GetSelf().Locality != "" {
-		param.PreferredLocality = optional.NewString(amf_context.GetSelf().Locality)
+	if amf_context.AMF_Self().Locality != "" {
+		param.PreferredLocality = optional.NewString(amf_context.AMF_Self().Locality)
 	}
 
 	ue.GmmLog.Debugf("Search SMF from NRF[%s]", nrfUri)
@@ -118,8 +115,7 @@ func SelectSmf(
 func SendCreateSmContextRequest(ue *amf_context.AmfUe, smContext *amf_context.SmContext,
 	requestType *models.RequestType, nasPdu []byte) (
 	response *models.PostSmContextsResponse, smContextRef string, errorResponse *models.PostSmContextsErrorResponse,
-	problemDetail *models.ProblemDetails, err1 error,
-) {
+	problemDetail *models.ProblemDetails, err1 error) {
 	smContextCreateData := buildCreateSmContextRequest(ue, smContext, nil)
 
 	postSmContextsRequest := models.PostSmContextsRequest{
@@ -131,16 +127,9 @@ func SendCreateSmContextRequest(ue *amf_context.AmfUe, smContext *amf_context.Sm
 	configuration.SetBasePath(smContext.SmfUri())
 	client := Nsmf_PDUSession.NewAPIClient(configuration)
 
-	postSmContextReponse, httpResponse, err := client.SMContextsCollectionApi.
-		PostSmContexts(context.Background(), postSmContextsRequest)
-	defer func() {
-		if httpResponse != nil {
-			if rspCloseErr := httpResponse.Body.Close(); rspCloseErr != nil {
-				logger.ConsumerLog.Errorf("PostSmContexts response body cannot close: %+v",
-					rspCloseErr)
-			}
-		}
-	}()
+	postSmContextReponse, httpResponse, err :=
+		client.SMContextsCollectionApi.PostSmContexts(context.Background(), postSmContextsRequest)
+
 	if err == nil {
 		response = &postSmContextReponse
 		smContextRef = httpResponse.Header.Get("Location")
@@ -164,9 +153,8 @@ func SendCreateSmContextRequest(ue *amf_context.AmfUe, smContext *amf_context.Sm
 }
 
 func buildCreateSmContextRequest(ue *amf_context.AmfUe, smContext *amf_context.SmContext,
-	requestType *models.RequestType,
-) (smContextCreateData models.SmContextCreateData) {
-	context := amf_context.GetSelf()
+	requestType *models.RequestType) (smContextCreateData models.SmContextCreateData) {
+	context := amf_context.AMF_Self()
 	smContextCreateData.Supi = ue.Supi
 	smContextCreateData.UnauthenticatedSupi = ue.UnauthenticatedSupi
 	smContextCreateData.Pei = ue.Pei
@@ -192,8 +180,8 @@ func buildCreateSmContextRequest(ue *amf_context.AmfUe, smContext *amf_context.S
 	// 	smContextCreateData.UeLocation = ue.Location
 	// }
 	smContextCreateData.UeTimeZone = ue.TimeZone
-	smContextCreateData.SmContextStatusUri = context.GetIPv4Uri() + factory.AmfCallbackResUriPrefix + "/smContextStatus/" +
-		ue.Supi + "/" + strconv.Itoa(int(smContext.PduSessionID()))
+	smContextCreateData.SmContextStatusUri = context.GetIPv4Uri() + "/namf-callback/v1/smContextStatus/" +
+		ue.Guti + "/" + strconv.Itoa(int(smContext.PduSessionID()))
 
 	return smContextCreateData
 }
@@ -217,8 +205,7 @@ func buildCreateSmContextRequest(ue *amf_context.AmfUe, smContext *amf_context.S
 
 func SendUpdateSmContextActivateUpCnxState(
 	ue *amf_context.AmfUe, smContext *amf_context.SmContext, accessType models.AccessType) (
-	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error,
-) {
+	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error) {
 	updateData := models.SmContextUpdateData{}
 	updateData.UpCnxState = models.UpCnxState_ACTIVATING
 	if !amf_context.CompareUserLocation(ue.Location, smContext.UserLocation()) {
@@ -228,7 +215,7 @@ func SendUpdateSmContextActivateUpCnxState(
 		updateData.AnType = smContext.AccessType()
 	}
 	if ladn, ok := ue.ServingAMF().LadnPool[smContext.Dnn()]; ok {
-		if amf_context.InTaiList(ue.Tai, ladn.TaiList) {
+		if amf_context.InTaiList(ue.Tai, ladn.TaiLists) {
 			updateData.PresenceInLadn = models.PresenceState_IN_AREA
 		}
 	}
@@ -237,8 +224,7 @@ func SendUpdateSmContextActivateUpCnxState(
 
 func SendUpdateSmContextDeactivateUpCnxState(ue *amf_context.AmfUe,
 	smContext *amf_context.SmContext, cause amf_context.CauseAll) (
-	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error,
-) {
+	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error) {
 	updateData := models.SmContextUpdateData{}
 	updateData.UpCnxState = models.UpCnxState_DEACTIVATED
 	updateData.UeLocation = &ue.Location
@@ -256,8 +242,7 @@ func SendUpdateSmContextDeactivateUpCnxState(ue *amf_context.AmfUe,
 
 func SendUpdateSmContextChangeAccessType(ue *amf_context.AmfUe,
 	smContext *amf_context.SmContext, anTypeCanBeChanged bool) (
-	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error,
-) {
+	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error) {
 	updateData := models.SmContextUpdateData{}
 	updateData.AnTypeCanBeChanged = anTypeCanBeChanged
 	return SendUpdateSmContextRequest(smContext, updateData, nil, nil)
@@ -265,8 +250,7 @@ func SendUpdateSmContextChangeAccessType(ue *amf_context.AmfUe,
 
 func SendUpdateSmContextN2Info(
 	ue *amf_context.AmfUe, smContext *amf_context.SmContext, n2SmType models.N2SmInfoType, N2SmInfo []byte) (
-	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error,
-) {
+	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error) {
 	updateData := models.SmContextUpdateData{}
 	updateData.N2SmInfoType = n2SmType
 	updateData.N2SmInfo = new(models.RefToBinaryData)
@@ -277,8 +261,7 @@ func SendUpdateSmContextN2Info(
 
 func SendUpdateSmContextXnHandover(
 	ue *amf_context.AmfUe, smContext *amf_context.SmContext, n2SmType models.N2SmInfoType, N2SmInfo []byte) (
-	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error,
-) {
+	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error) {
 	updateData := models.SmContextUpdateData{}
 	if n2SmType != "" {
 		updateData.N2SmInfoType = n2SmType
@@ -288,7 +271,7 @@ func SendUpdateSmContextXnHandover(
 	updateData.ToBeSwitched = true
 	updateData.UeLocation = &ue.Location
 	if ladn, ok := ue.ServingAMF().LadnPool[smContext.Dnn()]; ok {
-		if amf_context.InTaiList(ue.Tai, ladn.TaiList) {
+		if amf_context.InTaiList(ue.Tai, ladn.TaiLists) {
 			updateData.PresenceInLadn = models.PresenceState_IN_AREA
 		} else {
 			updateData.PresenceInLadn = models.PresenceState_OUT_OF_AREA
@@ -299,8 +282,7 @@ func SendUpdateSmContextXnHandover(
 
 func SendUpdateSmContextXnHandoverFailed(
 	ue *amf_context.AmfUe, smContext *amf_context.SmContext, n2SmType models.N2SmInfoType, N2SmInfo []byte) (
-	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error,
-) {
+	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error) {
 	updateData := models.SmContextUpdateData{}
 	if n2SmType != "" {
 		updateData.N2SmInfoType = n2SmType
@@ -316,8 +298,7 @@ func SendUpdateSmContextN2HandoverPreparing(
 	smContext *amf_context.SmContext,
 	n2SmType models.N2SmInfoType,
 	N2SmInfo []byte, amfid string, targetId *models.NgRanTargetId) (
-	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error,
-) {
+	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error) {
 	updateData := models.SmContextUpdateData{}
 	if n2SmType != "" {
 		updateData.N2SmInfoType = n2SmType
@@ -335,8 +316,7 @@ func SendUpdateSmContextN2HandoverPreparing(
 
 func SendUpdateSmContextN2HandoverPrepared(
 	ue *amf_context.AmfUe, smContext *amf_context.SmContext, n2SmType models.N2SmInfoType, N2SmInfo []byte) (
-	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error,
-) {
+	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error) {
 	updateData := models.SmContextUpdateData{}
 	if n2SmType != "" {
 		updateData.N2SmInfoType = n2SmType
@@ -349,8 +329,7 @@ func SendUpdateSmContextN2HandoverPrepared(
 
 func SendUpdateSmContextN2HandoverComplete(
 	ue *amf_context.AmfUe, smContext *amf_context.SmContext, amfid string, guami *models.Guami) (
-	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error,
-) {
+	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error) {
 	updateData := models.SmContextUpdateData{}
 	updateData.HoState = models.HoState_COMPLETED
 	if amfid != "" {
@@ -359,7 +338,7 @@ func SendUpdateSmContextN2HandoverComplete(
 		updateData.Guami = guami
 	}
 	if ladn, ok := ue.ServingAMF().LadnPool[smContext.Dnn()]; ok {
-		if amf_context.InTaiList(ue.Tai, ladn.TaiList) {
+		if amf_context.InTaiList(ue.Tai, ladn.TaiLists) {
 			updateData.PresenceInLadn = models.PresenceState_IN_AREA
 		} else {
 			updateData.PresenceInLadn = models.PresenceState_OUT_OF_AREA
@@ -370,8 +349,7 @@ func SendUpdateSmContextN2HandoverComplete(
 
 func SendUpdateSmContextN2HandoverCanceled(ue *amf_context.AmfUe,
 	smContext *amf_context.SmContext, cause amf_context.CauseAll) (
-	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error,
-) {
+	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error) {
 	updateData := models.SmContextUpdateData{}
 	updateData.HoState = models.HoState_CANCELLED
 	if cause.Cause != nil {
@@ -388,8 +366,7 @@ func SendUpdateSmContextN2HandoverCanceled(ue *amf_context.AmfUe,
 
 func SendUpdateSmContextHandoverBetweenAccessType(
 	ue *amf_context.AmfUe, smContext *amf_context.SmContext, targetAccessType models.AccessType, N1SmMsg []byte) (
-	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error,
-) {
+	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error) {
 	updateData := models.SmContextUpdateData{}
 	updateData.AnType = targetAccessType
 	if N1SmMsg != nil {
@@ -401,8 +378,7 @@ func SendUpdateSmContextHandoverBetweenAccessType(
 
 func SendUpdateSmContextHandoverBetweenAMF(
 	ue *amf_context.AmfUe, smContext *amf_context.SmContext, amfid string, guami *models.Guami, activate bool) (
-	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error,
-) {
+	*models.UpdateSmContextResponse, *models.UpdateSmContextErrorResponse, *models.ProblemDetails, error) {
 	updateData := models.SmContextUpdateData{}
 	updateData.ServingNfId = amfid
 	updateData.ServingNetwork = guami.PlmnId
@@ -413,7 +389,7 @@ func SendUpdateSmContextHandoverBetweenAMF(
 			updateData.UeLocation = &ue.Location
 		}
 		if ladn, ok := ue.ServingAMF().LadnPool[smContext.Dnn()]; ok {
-			if amf_context.InTaiList(ue.Tai, ladn.TaiList) {
+			if amf_context.InTaiList(ue.Tai, ladn.TaiLists) {
 				updateData.PresenceInLadn = models.PresenceState_IN_AREA
 			}
 		}
@@ -424,8 +400,7 @@ func SendUpdateSmContextHandoverBetweenAMF(
 func SendUpdateSmContextRequest(smContext *amf_context.SmContext,
 	updateData models.SmContextUpdateData, n1Msg []byte, n2Info []byte) (
 	response *models.UpdateSmContextResponse, errorResponse *models.UpdateSmContextErrorResponse,
-	problemDetail *models.ProblemDetails, err1 error,
-) {
+	problemDetail *models.ProblemDetails, err1 error) {
 	configuration := Nsmf_PDUSession.NewConfiguration()
 	configuration.SetBasePath(smContext.SmfUri())
 	client := Nsmf_PDUSession.NewAPIClient(configuration)
@@ -435,17 +410,10 @@ func SendUpdateSmContextRequest(smContext *amf_context.SmContext,
 	updateSmContextRequest.BinaryDataN1SmMessage = n1Msg
 	updateSmContextRequest.BinaryDataN2SmInformation = n2Info
 
-	updateSmContextReponse, httpResponse, err := client.IndividualSMContextApi.
-		UpdateSmContext(context.Background(), smContext.SmContextRef(),
+	updateSmContextReponse, httpResponse, err :=
+		client.IndividualSMContextApi.UpdateSmContext(context.Background(), smContext.SmContextRef(),
 			updateSmContextRequest)
-	defer func() {
-		if httpResponse != nil {
-			if rspCloseErr := httpResponse.Body.Close(); rspCloseErr != nil {
-				logger.ConsumerLog.Errorf("UpdateSmContext response body cannot close: %+v",
-					rspCloseErr)
-			}
-		}
-	}()
+
 	if err == nil {
 		response = &updateSmContextReponse
 	} else if httpResponse != nil {
@@ -471,8 +439,7 @@ func SendUpdateSmContextRequest(smContext *amf_context.SmContext,
 
 func SendReleaseSmContextRequest(ue *amf_context.AmfUe, smContext *amf_context.SmContext,
 	cause *amf_context.CauseAll, n2SmInfoType models.N2SmInfoType,
-	n2Info []byte,
-) (detail *models.ProblemDetails, err error) {
+	n2Info []byte) (detail *models.ProblemDetails, err error) {
 	configuration := Nsmf_PDUSession.NewConfiguration()
 	configuration.SetBasePath(smContext.SmfUri())
 	client := Nsmf_PDUSession.NewAPIClient(configuration)
@@ -484,34 +451,21 @@ func SendReleaseSmContextRequest(ue *amf_context.AmfUe, smContext *amf_context.S
 
 	response, err1 := client.IndividualSMContextApi.ReleaseSmContext(
 		context.Background(), smContext.SmContextRef(), releaseSmContextRequest)
-	defer func() {
-		if response != nil {
-			if rspCloseErr := response.Body.Close(); rspCloseErr != nil {
-				logger.ConsumerLog.Errorf("ReleaseSmContext response body cannot close: %+v",
-					rspCloseErr)
-			}
-		}
-	}()
+
 	if err1 == nil {
 		ue.SmContextList.Delete(smContext.PduSessionID())
 	} else if response != nil && response.Status == err1.Error() {
-		if response.StatusCode == 404 {
-			// assume succeeded to release SmContext
-			ue.SmContextList.Delete(smContext.PduSessionID())
-		} else {
-			problem := err1.(openapi.GenericOpenAPIError).Model().(models.ProblemDetails)
-			detail = &problem
-		}
+		problem := err1.(openapi.GenericOpenAPIError).Model().(models.ProblemDetails)
+		detail = &problem
 	} else {
 		err = err1
 	}
-	return detail, err
+	return
 }
 
 func buildReleaseSmContextRequest(
 	ue *amf_context.AmfUe, cause *amf_context.CauseAll, n2SmInfoType models.N2SmInfoType, n2Info []byte) (
-	releaseData models.SmContextReleaseData,
-) {
+	releaseData models.SmContextReleaseData) {
 	if cause != nil {
 		if cause.Cause != nil {
 			releaseData.Cause = *cause.Cause

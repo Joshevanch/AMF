@@ -8,11 +8,12 @@ import (
 	"github.com/free5gc/amf/internal/context"
 	"github.com/free5gc/amf/internal/logger"
 	"github.com/free5gc/ngap"
+	"github.com/free5gc/ngap/ngapType"
 )
 
 func Dispatch(conn net.Conn, msg []byte) {
 	var ran *context.AmfRan
-	amfSelf := context.GetSelf()
+	amfSelf := context.AMF_Self()
 
 	ran, ok := amfSelf.AmfRanFindByConn(conn)
 	if !ok {
@@ -32,21 +33,116 @@ func Dispatch(conn net.Conn, msg []byte) {
 		return
 	}
 
-	if ran == nil {
-		logger.NgapLog.Error("ran is nil")
-		return
+	switch pdu.Present {
+	case ngapType.NGAPPDUPresentInitiatingMessage:
+		initiatingMessage := pdu.InitiatingMessage
+		if initiatingMessage == nil {
+			ran.Log.Errorln("Initiating Message is nil")
+			return
+		}
+		switch initiatingMessage.ProcedureCode.Value {
+		case ngapType.ProcedureCodeNGSetup:
+			HandleNGSetupRequest(ran, pdu)
+		case ngapType.ProcedureCodeInitialUEMessage:
+			HandleInitialUEMessage(ran, pdu)
+		case ngapType.ProcedureCodeUplinkNASTransport:
+			HandleUplinkNasTransport(ran, pdu)
+		case ngapType.ProcedureCodeNGReset:
+			HandleNGReset(ran, pdu)
+		case ngapType.ProcedureCodeHandoverCancel:
+			HandleHandoverCancel(ran, pdu)
+		case ngapType.ProcedureCodeUEContextReleaseRequest:
+			HandleUEContextReleaseRequest(ran, pdu)
+		case ngapType.ProcedureCodeNASNonDeliveryIndication:
+			HandleNasNonDeliveryIndication(ran, pdu)
+		case ngapType.ProcedureCodeLocationReportingFailureIndication:
+			HandleLocationReportingFailureIndication(ran, pdu)
+		case ngapType.ProcedureCodeErrorIndication:
+			HandleErrorIndication(ran, pdu)
+		case ngapType.ProcedureCodeUERadioCapabilityInfoIndication:
+			HandleUERadioCapabilityInfoIndication(ran, pdu)
+		case ngapType.ProcedureCodeHandoverNotification:
+			HandleHandoverNotify(ran, pdu)
+		case ngapType.ProcedureCodeHandoverPreparation:
+			HandleHandoverRequired(ran, pdu)
+		case ngapType.ProcedureCodeRANConfigurationUpdate:
+			HandleRanConfigurationUpdate(ran, pdu)
+		case ngapType.ProcedureCodeRRCInactiveTransitionReport:
+			HandleRRCInactiveTransitionReport(ran, pdu)
+		case ngapType.ProcedureCodePDUSessionResourceNotify:
+			HandlePDUSessionResourceNotify(ran, pdu)
+		case ngapType.ProcedureCodePathSwitchRequest:
+			HandlePathSwitchRequest(ran, pdu)
+		case ngapType.ProcedureCodeLocationReport:
+			HandleLocationReport(ran, pdu)
+		case ngapType.ProcedureCodeUplinkUEAssociatedNRPPaTransport:
+			HandleUplinkUEAssociatedNRPPATransport(ran, pdu)
+		case ngapType.ProcedureCodeUplinkRANConfigurationTransfer:
+			HandleUplinkRanConfigurationTransfer(ran, pdu)
+		case ngapType.ProcedureCodePDUSessionResourceModifyIndication:
+			HandlePDUSessionResourceModifyIndication(ran, pdu)
+		case ngapType.ProcedureCodeCellTrafficTrace:
+			HandleCellTrafficTrace(ran, pdu)
+		case ngapType.ProcedureCodeUplinkRANStatusTransfer:
+			HandleUplinkRanStatusTransfer(ran, pdu)
+		case ngapType.ProcedureCodeUplinkNonUEAssociatedNRPPaTransport:
+			HandleUplinkNonUEAssociatedNRPPATransport(ran, pdu)
+		default:
+			ran.Log.Warnf("Not implemented(choice:%d, procedureCode:%d)\n", pdu.Present, initiatingMessage.ProcedureCode.Value)
+		}
+	case ngapType.NGAPPDUPresentSuccessfulOutcome:
+		successfulOutcome := pdu.SuccessfulOutcome
+		if successfulOutcome == nil {
+			ran.Log.Errorln("successful Outcome is nil")
+			return
+		}
+		switch successfulOutcome.ProcedureCode.Value {
+		case ngapType.ProcedureCodeNGReset:
+			HandleNGResetAcknowledge(ran, pdu)
+		case ngapType.ProcedureCodeUEContextRelease:
+			HandleUEContextReleaseComplete(ran, pdu)
+		case ngapType.ProcedureCodePDUSessionResourceRelease:
+			HandlePDUSessionResourceReleaseResponse(ran, pdu)
+		case ngapType.ProcedureCodeUERadioCapabilityCheck:
+			HandleUERadioCapabilityCheckResponse(ran, pdu)
+		case ngapType.ProcedureCodeAMFConfigurationUpdate:
+			HandleAMFconfigurationUpdateAcknowledge(ran, pdu)
+		case ngapType.ProcedureCodeInitialContextSetup:
+			HandleInitialContextSetupResponse(ran, pdu)
+		case ngapType.ProcedureCodeUEContextModification:
+			HandleUEContextModificationResponse(ran, pdu)
+		case ngapType.ProcedureCodePDUSessionResourceSetup:
+			HandlePDUSessionResourceSetupResponse(ran, pdu)
+		case ngapType.ProcedureCodePDUSessionResourceModify:
+			HandlePDUSessionResourceModifyResponse(ran, pdu)
+		case ngapType.ProcedureCodeHandoverResourceAllocation:
+			HandleHandoverRequestAcknowledge(ran, pdu)
+		default:
+			ran.Log.Warnf("Not implemented(choice:%d, procedureCode:%d)\n", pdu.Present, successfulOutcome.ProcedureCode.Value)
+		}
+	case ngapType.NGAPPDUPresentUnsuccessfulOutcome:
+		unsuccessfulOutcome := pdu.UnsuccessfulOutcome
+		if unsuccessfulOutcome == nil {
+			ran.Log.Errorln("unsuccessful Outcome is nil")
+			return
+		}
+		switch unsuccessfulOutcome.ProcedureCode.Value {
+		case ngapType.ProcedureCodeAMFConfigurationUpdate:
+			HandleAMFconfigurationUpdateFailure(ran, pdu)
+		case ngapType.ProcedureCodeInitialContextSetup:
+			HandleInitialContextSetupFailure(ran, pdu)
+		case ngapType.ProcedureCodeUEContextModification:
+			HandleUEContextModificationFailure(ran, pdu)
+		case ngapType.ProcedureCodeHandoverResourceAllocation:
+			HandleHandoverFailure(ran, pdu)
+		default:
+			ran.Log.Warnf("Not implemented(choice:%d, procedureCode:%d)\n", pdu.Present, unsuccessfulOutcome.ProcedureCode.Value)
+		}
 	}
-
-	if pdu == nil {
-		ran.Log.Error("NGAP Message is nil")
-		return
-	}
-
-	dispatchMain(ran, pdu)
 }
 
 func HandleSCTPNotification(conn net.Conn, notification sctp.Notification) {
-	amfSelf := context.GetSelf()
+	amfSelf := context.AMF_Self()
 
 	logger.NgapLog.Infof("Handle SCTP Notification[addr: %+v]", conn.RemoteAddr())
 
@@ -76,17 +172,4 @@ func HandleSCTPNotification(conn net.Conn, notification sctp.Notification) {
 	default:
 		ran.Log.Warnf("Non handled notification type: 0x%x", notification.Type())
 	}
-}
-
-func HandleSCTPConnError(conn net.Conn) {
-	amfSelf := context.GetSelf()
-
-	logger.NgapLog.Infof("Handle SCTP Connection Error[addr: %+v] - remove RAN", conn.RemoteAddr())
-
-	ran, ok := amfSelf.AmfRanFindByConn(conn)
-	if !ok {
-		logger.NgapLog.Warnf("RAN context has been removed[addr: %+v]", conn.RemoteAddr())
-		return
-	}
-	ran.Remove()
 }

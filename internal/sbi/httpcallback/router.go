@@ -8,7 +8,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/free5gc/amf/internal/logger"
-	"github.com/free5gc/amf/pkg/factory"
 	logger_util "github.com/free5gc/util/logger"
 )
 
@@ -41,7 +40,7 @@ func NewRouter() *gin.Engine {
 }
 
 func AddService(engine *gin.Engine) *gin.RouterGroup {
-	group := engine.Group(factory.AmfCallbackResUriPrefix)
+	group := engine.Group("/namf-callback/v1")
 
 	for _, route := range routes {
 		switch route.Method {
@@ -76,7 +75,7 @@ var routes = Routes{
 	{
 		"SmContextStatusNotify",
 		strings.ToUpper("Post"),
-		"/smContextStatus/:supi/:pduSessionId",
+		"/smContextStatus/:guti/:pduSessionId",
 		HTTPSmContextStatusNotify,
 	},
 

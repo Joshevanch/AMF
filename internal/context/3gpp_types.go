@@ -37,6 +37,11 @@ const (
 	TimeT3565 time.Duration = 6 * time.Second
 )
 
+type LADN struct {
+	Dnn      string
+	TaiLists []models.Tai
+}
+
 type CauseAll struct {
 	Cause        *models.Cause
 	NgapCause    *models.NgApCause

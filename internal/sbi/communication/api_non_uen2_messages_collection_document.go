@@ -16,7 +16,10 @@ import (
 	"log"
 	"net/http"
 
+	amf_context "github.com/free5gc/amf/internal/context"
 	"github.com/free5gc/amf/internal/logger"
+
+	ngap_message "github.com/free5gc/amf/internal/ngap/message"
 	"github.com/free5gc/openapi"
 	"github.com/free5gc/openapi/models"
 	"github.com/gin-gonic/gin"
@@ -33,7 +36,33 @@ func HTTPNonUeN2MessageTransfer(c *gin.Context) {
 	contentType := c.GetHeader("Content-Type")
 	openapi.Deserialize(&message, body, contentType)
 	insertToDatabase(message)
-	println(string(body))
+	println(string(message.BinaryDataN2Information))
+	amfSelf := amf_context.AMF_Self()
+	var globalRanNodeId models.GlobalRanNodeId
+	var plmnId models.PlmnId
+	plmnId.Mcc = "208"
+	plmnId.Mnc = "93"
+	var gnbId models.GNbId
+	gnbId.BitLength = 32
+	gnbId.GNBValue = "00000001"
+	globalRanNodeId.GNbId = &gnbId
+	globalRanNodeId.PlmnId = &plmnId
+	ranTest, ok := amfSelf.AmfRanFindByRanID(globalRanNodeId)
+	if !ok {
+		fmt.Println("UE Not found")
+	}
+	// var targetValue *amf_context.RanUe
+	// for key, value := range ue.RanUe {
+	// 	if key == "3GPP_ACCESS" {
+	// 		targetValue = value
+	// 		break
+	// 	}
+	// }
+	byteTest, err := ngap_message.BuildWriteReplaceWarningRequest()
+	if err != nil {
+		log.Fatal(err)
+	}
+	ngap_message.SendToRan(ranTest, byteTest)
 	c.JSON(http.StatusOK, gin.H{})
 }
 
