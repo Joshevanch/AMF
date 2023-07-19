@@ -1,6 +1,8 @@
 package message
 
 import (
+	"log"
+
 	"github.com/free5gc/amf/internal/context"
 	"github.com/free5gc/amf/internal/logger"
 	"github.com/free5gc/amf/internal/sbi/producer/callback"
@@ -611,6 +613,19 @@ func SendDownlinkRanStatusTransfer(ue *context.RanUe, container ngapType.RANStat
 		return
 	}
 	SendToRanUe(ue, pkt)
+}
+func SendWriteReplaceWarningRequest(ran *context.AmfRan, keyValueN2Information map[string]string) {
+	if ran == nil {
+		logger.NgapLog.Error("Ran is nil")
+		return
+	}
+	pkt, err := BuildWriteReplaceWarningRequest(keyValueN2Information)
+	if err != nil {
+		log.Fatal(err)
+		logger.NgapLog.Error("Error building request")
+		return
+	}
+	SendToRan(ran, pkt)
 }
 
 // anType indicate amfUe send this msg for which accessType
