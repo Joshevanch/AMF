@@ -181,10 +181,11 @@ func BuildWriteReplaceWarningRequest(keyValueN2Information map[string]string) ([
 
 	ie.Id.Value = ngapType.ProtocolIEIDMessageIdentifier
 	ie.Value.Present = ngapType.WriteReplaceWarningRequestIEsPresentMessageIdentifier
+	ie.Criticality.Value = ngapType.CriticalityPresentReject
 	ie.Value.MessageIdentifier = new(ngapType.MessageIdentifier)
 	messageIdentifier := ie.Value.MessageIdentifier
 	messageIdentifier.Value = *new(aper.BitString)
-	messageIdentifier.Value.Bytes, err = hex.DecodeString("1112")
+	messageIdentifier.Value.Bytes, err = hex.DecodeString(keyValueN2Information["messageIdentifier"])
 	if err != nil {
 		logger.NgapLog.Error(err)
 	}
@@ -193,28 +194,61 @@ func BuildWriteReplaceWarningRequest(keyValueN2Information map[string]string) ([
 
 	ie.Id.Value = ngapType.ProtocolIEIDSerialNumber
 	ie.Value.Present = ngapType.WriteReplaceWarningRequestIEsPresentSerialNumber
+	ie.Criticality.Value = ngapType.CriticalityPresentReject
 	ie.Value.SerialNumber = new(ngapType.SerialNumber)
 	serialNumber := ie.Value.SerialNumber
 	serialNumber.Value = *new(aper.BitString)
-	serialNumber.Value.Bytes, err = hex.DecodeString("3000")
+	serialNumber.Value.Bytes, err = hex.DecodeString(keyValueN2Information["serialNumber"])
 	if err != nil {
 		logger.NgapLog.Error(err)
 	}
 	serialNumber.Value.BitLength = 16
 	WriteReplaceWarningRequestIEs.List = append(WriteReplaceWarningRequestIEs.List, ie)
 
+	ie.Id.Value = ngapType.ProtocolIEIDWarningAreaList
+	ie.Value.Present = ngapType.WriteReplaceWarningRequestIEsPresentWarningAreaList
+	ie.Criticality.Value = ngapType.CriticalityPresentIgnore
+	ie.Value.WarningAreaList = new(ngapType.WarningAreaList)
+	warningAreaList := ie.Value.WarningAreaList
+	warningAreaList.Present = ngapType.WarningAreaListPresentTAIListForWarning
+	warningAreaList.TAIListForWarning = new(ngapType.TAIListForWarning)
+	taiListForWarning := warningAreaList.TAIListForWarning
+	taiListForWarning.List = make([]ngapType.TAI, 0)
+	context.AMF_Self().AmfRanPool.Range(func(key, value interface{}) bool {
+		tai := ngapType.TAI{}
+		plmnId := models.PlmnId{}
+		amfRan := value.(*context.AmfRan)
+		for i := 0; i < len(amfRan.SupportedTAList); i++ {
+			plmnId.Mcc = amfRan.SupportedTAList[i].Tai.PlmnId.Mcc
+			plmnId.Mnc = amfRan.SupportedTAList[i].Tai.PlmnId.Mnc
+			tac := amfRan.SupportedTAList[i].Tai.Tac
+			tai.PLMNIdentity = ngapConvert.PlmnIdToNgap(plmnId)
+			tai.TAC = *new(ngapType.TAC)
+			tai.TAC.Value = *new(aper.OctetString)
+			tai.TAC.Value, err = hex.DecodeString(tac)
+			taiListForWarning.List = append(taiListForWarning.List, tai)
+		}
+		return true
+	})
+
+	WriteReplaceWarningRequestIEs.List = append(WriteReplaceWarningRequestIEs.List, ie)
+
 	ie.Id.Value = ngapType.ProtocolIEIDRepetitionPeriod
 	ie.Value.Present = ngapType.WriteReplaceWarningRequestIEsPresentRepetitionPeriod
+	ie.Criticality.Value = ngapType.CriticalityPresentReject
 	ie.Value.RepetitionPeriod = new(ngapType.RepetitionPeriod)
 	repetitionPeriod := ie.Value.RepetitionPeriod
-	repetitionPeriod.Value = 1
+	repetitionPeriodInt, err := strconv.Atoi(keyValueN2Information["repetitionPeriod"])
+	repetitionPeriod.Value = int64(repetitionPeriodInt)
 	WriteReplaceWarningRequestIEs.List = append(WriteReplaceWarningRequestIEs.List, ie)
 
 	ie.Id.Value = ngapType.ProtocolIEIDNumberOfBroadcastsRequested
 	ie.Value.Present = ngapType.WriteReplaceWarningRequestIEsPresentNumberOfBroadcastsRequested
+	ie.Criticality.Value = ngapType.CriticalityPresentReject
 	ie.Value.NumberOfBroadcastsRequested = new(ngapType.NumberOfBroadcastsRequested)
 	numberOfBroadcastsRequested := ie.Value.NumberOfBroadcastsRequested
-	numberOfBroadcastsRequested.Value = 1
+	numberOfBroadcastsRequestedInt, err := strconv.Atoi(keyValueN2Information["numberOfBroadcastsRequested"])
+	numberOfBroadcastsRequested.Value = int64(numberOfBroadcastsRequestedInt)
 	WriteReplaceWarningRequestIEs.List = append(WriteReplaceWarningRequestIEs.List, ie)
 
 	ie.Id.Value = ngapType.ProtocolIEIDDataCodingScheme
@@ -223,7 +257,7 @@ func BuildWriteReplaceWarningRequest(keyValueN2Information map[string]string) ([
 	ie.Value.DataCodingScheme = new(ngapType.DataCodingScheme)
 	dataCodingScheme := ie.Value.DataCodingScheme
 	dataCodingScheme.Value = *new(aper.BitString)
-	dataCodingScheme.Value.Bytes, err = hex.DecodeString("01")
+	dataCodingScheme.Value.Bytes, err = hex.DecodeString(keyValueN2Information["dataCodingScheme"])
 	if err != nil {
 		logger.NgapLog.Error(err)
 	}
@@ -235,7 +269,7 @@ func BuildWriteReplaceWarningRequest(keyValueN2Information map[string]string) ([
 	ie.Criticality.Value = ngapType.CriticalityPresentIgnore
 	ie.Value.WarningMessageContents = new(ngapType.WarningMessageContents)
 	warningMessageContents := ie.Value.WarningMessageContents
-	message := "This is an example warning message for testing purposes."
+	message := keyValueN2Information["warningMessageContents"]
 	tpdus, _ := sms.Encode([]byte(message))
 	var messageBytes []byte
 	for _, p := range tpdus {
@@ -246,8 +280,6 @@ func BuildWriteReplaceWarningRequest(keyValueN2Information map[string]string) ([
 	warningMessageContents.Value = *new(aper.OctetString)
 	pagesNumber, err := hex.DecodeString("01")
 	bytesLength, err := hex.DecodeString(strconv.FormatInt(int64(len(messageBytes)), 16))
-	fmt.Println(bytesLength)
-	fmt.Println(len(message))
 	warningMessageContents.Value = append(pagesNumber, messageBytes...)
 	for len(warningMessageContents.Value) < 83 {
 		warningMessageContents.Value = append(warningMessageContents.Value, 0x00)
@@ -255,6 +287,14 @@ func BuildWriteReplaceWarningRequest(keyValueN2Information map[string]string) ([
 	warningMessageContents.Value = append(warningMessageContents.Value, bytesLength...)
 	WriteReplaceWarningRequestIEs.List = append(WriteReplaceWarningRequestIEs.List, ie)
 
+	ie.Id.Value = ngapType.ProtocolIEIDConcurrentWarningMessageInd
+	ie.Value.Present = ngapType.WriteReplaceWarningRequestIEsPresentConcurrentWarningMessageInd
+	ie.Criticality.Value = ngapType.CriticalityPresentReject
+	ie.Value.ConcurrentWarningMessageInd = new(ngapType.ConcurrentWarningMessageInd)
+	concurrentWarningMessageInd := ie.Value.ConcurrentWarningMessageInd
+	concurrentWarningMessageInd.Value = *new(aper.Enumerated)
+	concurrentWarningMessageInd.Value = 0
+	WriteReplaceWarningRequestIEs.List = append(WriteReplaceWarningRequestIEs.List, ie)
 	return ngap.Encoder(pdu)
 }
 
