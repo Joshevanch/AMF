@@ -15,19 +15,6 @@ func NonUeN2MessageTransferProcedure(amfSelf *amf_context.AMFContext, message mo
 	if err != nil {
 		log.Fatal(err)
 	}
-	// var globalRanNodeId models.GlobalRanNodeId
-	// // var plmnId models.PlmnId
-	// // plmnId.Mcc = "2018"
-	// // plmnId.Mnc = "93"
-	// var gnbId models.GNbId
-	// gnbId.BitLength = 32
-	// gnbId.GNBValue = "00000001"
-	// globalRanNodeId.GNbId = &gnbId
-	// // globalRanNodeId.PlmnId = &plmnId
-	// ran, ok := amfSelf.AmfRanFindByRanID(globalRanNodeId)
-	// if !ok {
-	// 	log.Fatal("UE Not found")
-	// }
 	amf_context.AMF_Self().AmfRanPool.Range(func(key, value interface{}) bool {
 		amfRan := value.(*amf_context.AmfRan)
 		ngap_message.SendWriteReplaceWarningRequest(amfRan, keyValueN2Information)

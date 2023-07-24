@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/free5gc/amf/internal/context"
 	"github.com/free5gc/amf/internal/logger"
@@ -270,16 +271,29 @@ func BuildWriteReplaceWarningRequest(keyValueN2Information map[string]string) ([
 	ie.Value.WarningMessageContents = new(ngapType.WarningMessageContents)
 	warningMessageContents := ie.Value.WarningMessageContents
 	message := keyValueN2Information["warningMessageContents"]
-	tpdus, _ := sms.Encode([]byte(message))
 	var messageBytes []byte
-	for _, p := range tpdus {
-		messageBytes, _ = p.MarshalBinary()
-		// send binary TPDU...
+	var bytesLength []byte
+	if keyValueN2Information["dataCodingScheme"] == "00" {
+		tpdus, _ := sms.Encode([]byte(message))
+		for _, p := range tpdus {
+			messageBytes, _ = p.MarshalBinary()
+			// send binary TPDU...
+		}
+		messageBytes = messageBytes[7:]
 	}
-	messageBytes = messageBytes[7:]
-	warningMessageContents.Value = *new(aper.OctetString)
+	if keyValueN2Information["dataCodingScheme"] == "48" {
+		encodedMessage := fmt.Sprintf("%04x", utf16.Encode([]rune(message)))
+		encodedMessage = strings.Replace(encodedMessage[1:len(encodedMessage)-1], " ", "", -1)
+		messageBytes, err = hex.DecodeString(encodedMessage)
+		fmt.Println(messageBytes)
+	}
 	pagesNumber, err := hex.DecodeString("01")
-	bytesLength, err := hex.DecodeString(strconv.FormatInt(int64(len(messageBytes)), 16))
+	messageLength := strconv.FormatInt(int64(len(messageBytes)), 16)
+	if len(messageLength)%2 == 1 {
+		bytesLength, err = hex.DecodeString("0" + messageLength)
+	} else {
+		bytesLength, err = hex.DecodeString(messageLength)
+	}
 	warningMessageContents.Value = append(pagesNumber, messageBytes...)
 	for len(warningMessageContents.Value) < 83 {
 		warningMessageContents.Value = append(warningMessageContents.Value, 0x00)

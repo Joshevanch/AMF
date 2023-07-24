@@ -330,6 +330,54 @@ func HandleNGReset(ran *context.AmfRan, message *ngapType.NGAPPDU) {
 	}
 }
 
+func HandleWriteReplaceWarningResponse(ran *context.AmfRan, message *ngapType.NGAPPDU){
+	if ran == nil {
+		logger.NgapLog.Error("ran is nil")
+		return
+	}
+	successfulOutcome := message.SuccessfulOutcome
+	writeReplaceWarningResponse := successfulOutcome.Value.WriteReplaceWarningResponse
+	for _, ie := range writeReplaceWarningResponse.ProtocolIEs.List{
+		switch ie.Id.Value {
+		case ngapType.ProtocolIEIDBroadcastCompletedAreaList:
+			completedAreaListPresent := ie.Value.BroadcastCompletedAreaList.Present
+			switch completedAreaListPresent {
+			case ngapType.BroadcastCompletedAreaListPresentCellIDBroadcastEUTRA:
+				completedAreaListPresentCellIDBroadcastEUTRA := ie.Value.BroadcastCompletedAreaList.CellIDBroadcastEUTRA         
+				for _, item := range completedAreaListPresentCellIDBroadcastEUTRA.List {
+					ran.Log.Infof("Broadcast Completed Area List: ECGI: PLMNID: %x, EUTRACellID: %x", item.EUTRACGI.PLMNIdentity.Value, item.EUTRACGI.EUTRACellIdentity.Value.Bytes)
+				}
+			case ngapType.BroadcastCompletedAreaListPresentTAIBroadcastEUTRA:
+				completedAreaListPresentTAIBroadcastEUTRA := ie.Value.BroadcastCompletedAreaList.TAIBroadcastEUTRA            
+				for _, item := range completedAreaListPresentTAIBroadcastEUTRA.List {
+					ran.Log.Infof("BroadcastCompletedAreaList: TAI: PLMNID: %x, TAC: %x", item.TAI.PLMNIdentity.Value, item.TAI.TAC.Value)
+				}
+			case ngapType.BroadcastCompletedAreaListPresentEmergencyAreaIDBroadcastEUTRA:
+				completedAreaListPresentEmergencyAreaIDBroadcastEUTRA := ie.Value.BroadcastCompletedAreaList.EmergencyAreaIDBroadcastEUTRA            
+				for _, item := range completedAreaListPresentEmergencyAreaIDBroadcastEUTRA.List {
+					ran.Log.Infof("BroadcastCompletedAreaList: Emergency Area ID:%x", item.EmergencyAreaID.Value)
+				}
+			case ngapType.BroadcastCompletedAreaListPresentCellIDBroadcastNR:
+				completedAreaListPresentCellIDBroadcastNR := ie.Value.BroadcastCompletedAreaList.CellIDBroadcastNR            
+				for _, item := range completedAreaListPresentCellIDBroadcastNR.List {
+					ran.Log.Infof("BroadcastCompletedAreaList: CellIDBroadcastNR: CellID: %x", item.NRCGI.NRCellIdentity.Value.Bytes)
+				}
+			case ngapType.BroadcastCompletedAreaListPresentTAIBroadcastNR:
+				completedAreaListPresentTAIBroadcastNR := ie.Value.BroadcastCompletedAreaList.TAIBroadcastNR
+				for _, item := range completedAreaListPresentTAIBroadcastNR.List {
+					ran.Log.Infof("BroadcastCompletedAreaList: TAIBroadcastNR: TAI: PLMNID: %x, TAC: %x", item.TAI.PLMNIdentity.Value, item.TAI.TAC.Value)
+				}
+			case ngapType.BroadcastCompletedAreaListPresentEmergencyAreaIDBroadcastNR:
+				completedAreaListPresentEmergencyAreaIDBroadcastNR := ie.Value.BroadcastCompletedAreaList.EmergencyAreaIDBroadcastNR 
+				for _, item := range completedAreaListPresentEmergencyAreaIDBroadcastNR.List {
+					ran.Log.Infof("BroadcastCompletedAreaList: Emergency Area ID:%x", item.EmergencyAreaID.Value)
+				}
+					
+			}
+	}
+}
+}
+
 func HandleNGResetAcknowledge(ran *context.AmfRan, message *ngapType.NGAPPDU) {
 	var uEAssociatedLogicalNGConnectionList *ngapType.UEAssociatedLogicalNGConnectionList
 	var criticalityDiagnostics *ngapType.CriticalityDiagnostics
