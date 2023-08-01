@@ -2,6 +2,7 @@ package message
 
 import (
 	"log"
+	"time"
 
 	"github.com/free5gc/amf/internal/context"
 	"github.com/free5gc/amf/internal/logger"
@@ -625,6 +626,9 @@ func SendWriteReplaceWarningRequest(ran *context.AmfRan, keyValueN2Information m
 		logger.NgapLog.Error("Error building request")
 		return
 	}
+	taiwanTimezone, err := time.LoadLocation("Asia/Taipei")
+	currentTime := time.Now().In(taiwanTimezone)
+	logger.NgapLog.Infof("Send time: %s", currentTime.Format("2006-01-02 15:04:05"))
 	SendToRan(ran, pkt)
 }
 

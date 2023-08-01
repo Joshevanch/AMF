@@ -56,7 +56,7 @@ func deleteObjectByID(id string) error {
 	// Delete the document matching the filter
 	result, err := collection.DeleteOne(context.Background(), filter)
 	if err != nil {
-		fmt.Println("failed to delete document: %v", err)
+		fmt.Printf("failed to delete document: %v", err)
 	}
 
 	// Check the result to see if any documents were deleted

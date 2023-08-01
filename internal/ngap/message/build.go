@@ -3,6 +3,7 @@ package message
 import (
 	"encoding/hex"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"unicode/utf16"
@@ -271,6 +272,7 @@ func BuildWriteReplaceWarningRequest(keyValueN2Information map[string]string) ([
 	ie.Value.WarningMessageContents = new(ngapType.WarningMessageContents)
 	warningMessageContents := ie.Value.WarningMessageContents
 	message := keyValueN2Information["warningMessageContents"]
+	var pagesNumberBytes []byte
 	var messageBytes []byte
 	var bytesLength []byte
 	if keyValueN2Information["dataCodingScheme"] == "00" {
@@ -285,20 +287,40 @@ func BuildWriteReplaceWarningRequest(keyValueN2Information map[string]string) ([
 		encodedMessage := fmt.Sprintf("%04x", utf16.Encode([]rune(message)))
 		encodedMessage = strings.Replace(encodedMessage[1:len(encodedMessage)-1], " ", "", -1)
 		messageBytes, err = hex.DecodeString(encodedMessage)
-		fmt.Println(messageBytes)
 	}
-	pagesNumber, err := hex.DecodeString("01")
-	messageLength := strconv.FormatInt(int64(len(messageBytes)), 16)
-	if len(messageLength)%2 == 1 {
-		bytesLength, err = hex.DecodeString("0" + messageLength)
+	pagesNumber := math.Ceil(float64(len(messageBytes)) / float64(82))
+	pagesNumberLength := strconv.FormatInt(int64(pagesNumber), 16)
+	if len(pagesNumberLength)%2 == 1 {
+		pagesNumberBytes, err = hex.DecodeString("0" + pagesNumberLength)
 	} else {
-		bytesLength, err = hex.DecodeString(messageLength)
+		pagesNumberBytes, err = hex.DecodeString(pagesNumberLength)
 	}
-	warningMessageContents.Value = append(pagesNumber, messageBytes...)
-	for len(warningMessageContents.Value) < 83 {
-		warningMessageContents.Value = append(warningMessageContents.Value, 0x00)
+	warningMessageContents.Value = append(pagesNumberBytes)
+	for i := 0; i < int(pagesNumber)-1; i++ {
+		start := i * 82
+		end := (i + 1) * 82
+		contentLength, err := hex.DecodeString(strconv.FormatInt(int64(82), 16))
+		if err != nil {
+			fmt.Errorf("error: %s", err)
+		}
+		messageContent := make([]byte, end-start)
+		copy(messageContent, messageBytes[start:end])
+		messageContentBytes := append(messageContent, contentLength...)
+		warningMessageContents.Value = append(warningMessageContents.Value, messageContentBytes...)
 	}
-	warningMessageContents.Value = append(warningMessageContents.Value, bytesLength...)
+	messageContent := make([]byte, len(messageBytes)-int((pagesNumber-1)*82))
+	copy(messageContent, messageBytes[int((pagesNumber-1)*82):])
+	pagesLength := strconv.FormatInt(int64(len(messageContent)), 16)
+	if len(pagesLength)%2 == 1 {
+		bytesLength, err = hex.DecodeString("0" + pagesLength)
+	} else {
+		bytesLength, err = hex.DecodeString(pagesLength)
+	}
+	for len(messageContent) < 82 {
+		messageContent = append(messageContent, 0x00)
+	}
+	messageContentBytes := append(messageContent, bytesLength...)
+	warningMessageContents.Value = append(warningMessageContents.Value, messageContentBytes...)
 	WriteReplaceWarningRequestIEs.List = append(WriteReplaceWarningRequestIEs.List, ie)
 
 	ie.Id.Value = ngapType.ProtocolIEIDConcurrentWarningMessageInd

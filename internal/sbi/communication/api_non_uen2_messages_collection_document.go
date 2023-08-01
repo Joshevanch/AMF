@@ -15,6 +15,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"time"
 
 	amf_context "github.com/free5gc/amf/internal/context"
 	"github.com/free5gc/amf/internal/logger"
@@ -30,6 +31,13 @@ import (
 func HTTPNonUeN2MessageTransfer(c *gin.Context) {
 	logger.CommLog.Warnf("Handle Non Ue N2 Message Transfer is not implemented.")
 	body, _ := ioutil.ReadAll(c.Request.Body)
+	taiwanTimezone, err := time.LoadLocation("Asia/Taipei")
+	if err != nil {
+		fmt.Println("Error loading Taiwan timezone:", err)
+		return
+	}
+	currentTime := time.Now().In(taiwanTimezone)
+	logger.CommLog.Infof("Receive Non Ue N2 Message Transfer at %s", currentTime.Format("2006-01-02 15:04:05"))
 	var message models.NonUeN2MessageTransferRequest
 	message.JsonData = new(models.N2InformationTransferReqData)
 	contentType := c.GetHeader("Content-Type")
