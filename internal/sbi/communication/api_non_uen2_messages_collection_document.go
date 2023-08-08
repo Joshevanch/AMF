@@ -37,7 +37,7 @@ func HTTPNonUeN2MessageTransfer(c *gin.Context) {
 		return
 	}
 	currentTime := time.Now().In(taiwanTimezone)
-	logger.CommLog.Infof("Receive Non Ue N2 Message Transfer at %s", currentTime.Format("2006-01-02 15:04:05"))
+	logger.CommLog.Infof("Receive Non Ue N2 Message Transfer at %s", currentTime.Format("2006-01-02 15:04:05.000 UTC-07:00"))
 	var message models.NonUeN2MessageTransferRequest
 	message.JsonData = new(models.N2InformationTransferReqData)
 	contentType := c.GetHeader("Content-Type")
@@ -58,13 +58,9 @@ func insertToDatabase(message models.NonUeN2MessageTransferRequest) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	fmt.Println("Connected to MongoDB!")
 	collection := client.Database("local").Collection("AMFNonUeN2MessageTransfer")
-	insertResult, err := collection.InsertOne(context.TODO(), message)
+	_, err = collection.InsertOne(context.TODO(), message)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("Inserted document ID: %v\n", insertResult.InsertedID)
-
 }

@@ -117,8 +117,6 @@ func Dispatch(conn net.Conn, msg []byte) {
 			HandlePDUSessionResourceModifyResponse(ran, pdu)
 		case ngapType.ProcedureCodeHandoverResourceAllocation:
 			HandleHandoverRequestAcknowledge(ran, pdu)
-		case ngapType.ProcedureCodeWriteReplaceWarning:
-			
 		default:
 			ran.Log.Warnf("Not implemented(choice:%d, procedureCode:%d)\n", pdu.Present, successfulOutcome.ProcedureCode.Value)
 		}

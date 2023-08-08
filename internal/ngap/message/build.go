@@ -187,7 +187,7 @@ func BuildWriteReplaceWarningRequest(keyValueN2Information map[string]string) ([
 	ie.Value.MessageIdentifier = new(ngapType.MessageIdentifier)
 	messageIdentifier := ie.Value.MessageIdentifier
 	messageIdentifier.Value = *new(aper.BitString)
-	messageIdentifier.Value.Bytes, err = hex.DecodeString(keyValueN2Information["messageIdentifier"])
+	messageIdentifier.Value.Bytes, err = hex.DecodeString("1112")
 	if err != nil {
 		logger.NgapLog.Error(err)
 	}
@@ -275,7 +275,7 @@ func BuildWriteReplaceWarningRequest(keyValueN2Information map[string]string) ([
 	var pagesNumberBytes []byte
 	var messageBytes []byte
 	var bytesLength []byte
-	if keyValueN2Information["dataCodingScheme"] == "00" {
+	if keyValueN2Information["dataCodingScheme"] == "01" {
 		tpdus, _ := sms.Encode([]byte(message))
 		for _, p := range tpdus {
 			messageBytes, _ = p.MarshalBinary()
