@@ -616,6 +616,9 @@ func SendDownlinkRanStatusTransfer(ue *context.RanUe, container ngapType.RANStat
 	SendToRanUe(ue, pkt)
 }
 func SendWriteReplaceWarningRequest(ran *context.AmfRan, keyValueN2Information map[string]string) {
+	taiwanTimezone, err := time.LoadLocation("Asia/Taipei")
+	currentTime := time.Now().In(taiwanTimezone)
+	logger.NgapLog.Infof("Send Non Ue N2 Message Transfer at %s", currentTime.Format("2006-01-02 15:04:05.000 UTC-07:00"))
 	if ran == nil {
 		logger.NgapLog.Error("Ran is nil")
 		return
@@ -626,9 +629,6 @@ func SendWriteReplaceWarningRequest(ran *context.AmfRan, keyValueN2Information m
 		logger.NgapLog.Error("Error building request")
 		return
 	}
-	taiwanTimezone, err := time.LoadLocation("Asia/Taipei")
-	currentTime := time.Now().In(taiwanTimezone)
-	logger.NgapLog.Infof("Send time: %s", currentTime.Format("2006-01-02 15:04:05"))
 	SendToRan(ran, pkt)
 }
 
