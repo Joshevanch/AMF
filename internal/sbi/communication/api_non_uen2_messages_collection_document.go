@@ -23,9 +23,19 @@ import (
 	"github.com/free5gc/openapi"
 	"github.com/free5gc/openapi/models"
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
+
+type MessageTimestamp struct {
+	MessageIdentifier int32     `json:"messageIdentifier"`
+	SerialNumber      int32     `json:"serialNumber"`
+	CBESentTime       time.Time `json:"cbeSentTime"`
+	CBCFReceivedTime  time.Time `json:"cbcfReceivedTime"`
+	CBCFSentTime      time.Time `json:"cbcfSentTime"`
+	DelayCBCF         string    `json:"delayCbcf"`
+}
 
 // NonUeN2MessageTransfer - Namf_Communication Non UE N2 Message Transfer service Operation
 func HTTPNonUeN2MessageTransfer(c *gin.Context) {
@@ -37,11 +47,22 @@ func HTTPNonUeN2MessageTransfer(c *gin.Context) {
 		return
 	}
 	currentTime := time.Now().In(taiwanTimezone)
-	logger.CommLog.Infof("Receive Non Ue N2 Message Transfer at %s", currentTime.Format("2006-01-02 15:04:05.000 UTC-07:00"))
 	var message models.NonUeN2MessageTransferRequest
 	message.JsonData = new(models.N2InformationTransferReqData)
 	contentType := c.GetHeader("Content-Type")
 	openapi.Deserialize(&message, body, contentType)
+	cbcfRecord := getFromDatabase()
+	cbeSentTime := cbcfRecord.CBCFSentTime.In(taiwanTimezone)
+	cbcfReceivedTime := cbcfRecord.CBCFReceivedTime.In(taiwanTimezone)
+	cbcfSentTime := cbcfRecord.CBCFSentTime.In(taiwanTimezone)
+	delayCBCF := cbcfRecord.DelayCBCF
+	delayAMF := currentTime.Sub(cbeSentTime).String()
+	logger.CommLog.Infof("CBE Sent Time: %s", cbeSentTime.Format("2006-01-02 15:04:05.000 UTC-07:00"))
+	logger.CommLog.Infof("CBCF Received Time: %s", cbcfReceivedTime.Format("2006-01-02 15:04:05.000 UTC-07:00"))
+	logger.CommLog.Infof("CBCF Sent Time: %s", cbcfSentTime.Format("2006-01-02 15:04:05.000 UTC-07:00"))
+	logger.CommLog.Infof("AMF Received Time: %s", currentTime.Format("2006-01-02 15:04:05.000 UTC-07:00"))
+	logger.CommLog.Infof("Delay CBCF: %s", delayCBCF)
+	logger.CommLog.Infof("Delay AMF:%s ", delayAMF)
 	insertToDatabase(message)
 	amfSelf := amf_context.AMF_Self()
 	producer.NonUeN2MessageTransferProcedure(amfSelf, message)
@@ -63,4 +84,22 @@ func insertToDatabase(message models.NonUeN2MessageTransferRequest) {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func getFromDatabase() (cbcfRecord MessageTimestamp) {
+	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
+	client, err := mongo.Connect(context.TODO(), clientOptions)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = client.Ping(context.TODO(), nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	collection := client.Database("local").Collection("cbcfTimestamp")
+	opts := options.FindOne().SetSort(bson.M{"$natural": -1})
+	if err = collection.FindOne(context.TODO(), bson.M{}, opts).Decode(&cbcfRecord); err != nil {
+		log.Fatal(err)
+	}
+	return cbcfRecord
 }
